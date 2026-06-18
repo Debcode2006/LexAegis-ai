@@ -26,7 +26,9 @@ from app.safety.pii import PIIDetector, get_pii_detector
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9])")
-_CITATION_RE = re.compile(r"\[(?:source|doc|p\.?|page|clause|section)[^\]]*\]", re.I)
+_CITATION_RE = re.compile(
+    r"\[(?:S\d+|(?:source|doc|p\.?|page|clause|section)[^\]]*)\]", re.I
+)
 
 
 def _tokens(text: str) -> set[str]:

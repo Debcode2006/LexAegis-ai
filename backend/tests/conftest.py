@@ -72,11 +72,14 @@ def client():
     from fastapi.testclient import TestClient
 
     from app.main import create_app
+    from app.retrieval.sparse import get_bm25_index
+    from app.retrieval.vector_store import get_vector_store
+    from app.services.document_registry import get_document_registry
     from app.services.rate_limiter import get_rate_limiter
 
-    # Reset rate-limiter buckets between tests for isolation.
-    limiter = get_rate_limiter()
-    if hasattr(limiter, "reset"):
-        limiter.reset()  # type: ignore[attr-defined]
+    # Reset all in-memory singletons between tests for isolation.
+    for obj in (get_rate_limiter(), get_vector_store(), get_bm25_index(), get_document_registry()):
+        if hasattr(obj, "reset"):
+            obj.reset()  # type: ignore[attr-defined]
 
     return TestClient(create_app())

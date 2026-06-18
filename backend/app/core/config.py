@@ -251,6 +251,12 @@ class Settings(BaseSettings):
     enforce_tenant_isolation: bool = Field(default=True)
 
     # --- Nested subsystem settings -------------------------------------------
+    # --- Agent orchestration --------------------------------------------------
+    # orchestrator: "langgraph" (production) | "sequential" (no LangGraph dep).
+    agent_orchestrator: str = Field(default="langgraph")
+    use_llm_for_understanding: bool = Field(default=True)
+    use_llm_for_reasoning: bool = Field(default=True)
+
     supabase: SupabaseSettings = Field(default_factory=SupabaseSettings)
     rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
