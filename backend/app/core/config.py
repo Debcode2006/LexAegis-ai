@@ -140,6 +140,13 @@ class EmbeddingSettings(BaseSettings):
     device: str = Field(default="cpu", description="cpu | cuda")
     batch_size: int = Field(default=16, ge=1)
     normalize: bool = Field(default=True)
+    # backend: "bge" (sentence-transformers) | "hashing" (deterministic, light).
+    backend: str = Field(default="bge")
+    dimension: int = Field(default=1024, ge=8, description="Hashing-embedder dim.")
+    # Prefix prepended to passages/queries per BGE retrieval recommendation.
+    query_instruction: str = Field(
+        default="Represent this sentence for searching relevant passages: "
+    )
 
 
 class RetrievalSettings(BaseSettings):
@@ -153,6 +160,14 @@ class RetrievalSettings(BaseSettings):
     rerank_top_k: int = Field(default=8, ge=1)
     final_top_k: int = Field(default=5, ge=1)
     dedup_threshold: float = Field(default=0.95, ge=0.0, le=1.0)
+    # Stores / rerankers can be swapped for light local backends.
+    vector_store: str = Field(default="chroma", description="chroma | memory")
+    reranker_backend: str = Field(default="bge", description="bge | lexical")
+    enable_reranker: bool = Field(default=True)
+    enable_compression: bool = Field(default=True)
+    # Chunking controls.
+    chunk_max_chars: int = Field(default=1200, ge=200)
+    chunk_overlap_chars: int = Field(default=150, ge=0)
 
 
 class SafetySettings(BaseSettings):
@@ -165,6 +180,13 @@ class SafetySettings(BaseSettings):
     enable_output_safety: bool = Field(default=True)
     enable_pii_masking: bool = Field(default=True)
     presidio_language: str = Field(default="en")
+    # Backend selectors: production defaults + light fallbacks for local/test.
+    pii_backend: str = Field(default="presidio", description="presidio | regex")
+    input_guard_backend: str = Field(default="llama_guard", description="llama_guard | heuristic")
+    pii_score_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    # Output-safety thresholds.
+    min_citation_coverage: float = Field(default=0.5, ge=0.0, le=1.0)
+    block_on_pii_leak: bool = Field(default=True)
     pii_entities: CsvList = Field(
         default_factory=lambda: [
             "PERSON",
