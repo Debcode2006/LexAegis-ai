@@ -1,0 +1,95 @@
+{
+  "generated_at": "2026-06-18T19:37:14.682577+00:00",
+  "dataset": "lexaegis-legal-benchmark-v1",
+  "evaluator": "offline_lexical",
+  "summary": {
+    "faithfulness": 0.7474,
+    "answer_relevancy": 0.7245,
+    "groundedness": 0.7474,
+    "context_precision": 0.6,
+    "context_recall": 1.0,
+    "intent_correct": 0.6
+  },
+  "samples": [
+    {
+      "question": "How long do the confidentiality obligations survive after termination?",
+      "answer": "Based on the retrieved documents: The confidentiality obligations survive termination of this Agreement for a period of five years. [S1]",
+      "ground_truth": "The confidentiality obligations survive termination of the Agreement for a period of five years.",
+      "confidence": 0.6402,
+      "intent_expected": "contract_review",
+      "intent_predicted": "contract_review",
+      "scores": {
+        "faithfulness": 0.6667,
+        "answer_relevancy": 0.6667,
+        "groundedness": 0.6667,
+        "context_precision": 0.5,
+        "context_recall": 1.0,
+        "intent_correct": 1.0
+      }
+    },
+    {
+      "question": "What is the cap on each party's total aggregate liability?",
+      "answer": "Based on the retrieved documents: The total aggregate liability of either party shall not exceed the fees paid in the twelve months preceding the claim. [S1]",
+      "ground_truth": "Each party's total aggregate liability shall not exceed the fees paid in the twelve months preceding the claim.",
+      "confidence": 0.6089,
+      "intent_expected": "legal_risk_analysis",
+      "intent_predicted": "legal_risk_analysis",
+      "scores": {
+        "faithfulness": 0.7647,
+        "answer_relevancy": 0.7059,
+        "groundedness": 0.7647,
+        "context_precision": 1.0,
+        "context_recall": 1.0,
+        "intent_correct": 1.0
+      }
+    },
+    {
+      "question": "What notice is required to terminate the agreement for convenience?",
+      "answer": "Based on the retrieved documents: Either party may terminate this Agreement for convenience upon thirty days prior written notice. [S1]",
+      "ground_truth": "Either party may terminate for convenience upon thirty days prior written notice.",
+      "confidence": 0.6778,
+      "intent_expected": "contract_review",
+      "intent_predicted": "contract_review",
+      "scores": {
+        "faithfulness": 0.75,
+        "answer_relevancy": 0.75,
+        "groundedness": 0.75,
+        "context_precision": 0.5,
+        "context_recall": 1.0,
+        "intent_correct": 1.0
+      }
+    },
+    {
+      "question": "How long are customer records retained after account closure?",
+      "answer": "Based on the retrieved documents: Customer records shall be deleted within ninety days of account closure unless a legal obligation requires longer retention. [S1]",
+      "ground_truth": "Customer records shall be deleted within ninety days of account closure unless a legal obligation requires longer retention.",
+      "confidence": 0.5624,
+      "intent_expected": "policy_lookup",
+      "intent_predicted": "contract_review",
+      "scores": {
+        "faithfulness": 0.7778,
+        "answer_relevancy": 0.7778,
+        "groundedness": 0.7778,
+        "context_precision": 0.5,
+        "context_recall": 1.0,
+        "intent_correct": 0.0
+      }
+    },
+    {
+      "question": "Within how many days must a data subject access request be fulfilled?",
+      "answer": "Based on the retrieved documents: DATA SUBJECT RIGHTS\nData subjects have the right to access their personal data within thirty days of a verified request. [S1]",
+      "ground_truth": "Data subjects have the right to access their personal data within thirty days of a verified request.",
+      "confidence": 0.6663,
+      "intent_expected": "compliance_check",
+      "intent_predicted": "contract_review",
+      "scores": {
+        "faithfulness": 0.7778,
+        "answer_relevancy": 0.7222,
+        "groundedness": 0.7778,
+        "context_precision": 0.5,
+        "context_recall": 1.0,
+        "intent_correct": 0.0
+      }
+    }
+  ]
+}
