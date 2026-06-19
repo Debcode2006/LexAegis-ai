@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.agents.citation import CitationAgent
 from app.agents.confidence import ConfidenceAgent
 from app.agents.output_safety_agent import OutputSafetyAgent
@@ -35,6 +37,34 @@ def _scored(cid, doc, text):
 def test_query_understanding_heuristic_intent():
     out = QueryUnderstandingAgent(provider=None).run(_state())
     assert out["intent"] == Intent.LEGAL_RISK_ANALYSIS
+
+
+@pytest.mark.parametrize(
+    "query, expected_ref",
+    [
+        ("What does Section 3 PAYMENT say?", "Section 3"),
+        ("What does Section 6 TERMINATION say?", "Section 6"),
+        ("What does Section 9 GOVERNING LAW say?", "Section 9"),
+        ("What does Clause 4.2 say?", "Clause 4.2"),
+    ],
+)
+def test_query_understanding_extracts_clause_reference(query, expected_ref):
+    # Regression: _CLAUSE_REF_RE previously had no capturing group, so the
+    # heuristic path raised "IndexError: no such group" -> HTTP 500.
+    out = QueryUnderstandingAgent(provider=None).run(_state(query))
+    entities = out["entities"]
+    assert any(e.lower() == expected_ref.lower() for e in entities), entities
+
+
+def test_extract_entities_never_raises_on_group_less_regex():
+    # The defensive helper must tolerate a group-less pattern without raising.
+    for query in (
+        "What does Section 3 PAYMENT say?",
+        "Section. Article. Clause.",  # references with no number
+        "",  # empty query
+    ):
+        # Must not raise; returns a (possibly empty) list.
+        assert isinstance(QueryUnderstandingAgent._extract_entities(query), list)
 
 
 def test_planner_maps_intent_to_workflow():

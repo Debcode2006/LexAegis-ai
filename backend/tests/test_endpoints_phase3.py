@@ -81,6 +81,27 @@ def test_chat_end_to_end(client, make_token):
     assert body["trace"]
 
 
+def test_chat_section_reference_does_not_500(client, make_token):
+    # Regression: section/clause references used to raise IndexError in entity
+    # extraction, surfacing as HTTP 500. They must now return a normal 200.
+    headers = _auth(make_token)
+    client.post(
+        "/api/v1/documents/upload",
+        headers=headers,
+        files={"file": ("msa.txt", SAMPLE_DOC, "text/plain")},
+        data={"document_type": "contract"},
+    )
+    for query in (
+        "What does Section 3 PAYMENT say?",
+        "What does Section 6 TERMINATION say?",
+        "What does Section 9 GOVERNING LAW say?",
+        "What does Clause 4.2 say?",
+    ):
+        resp = client.post("/api/v1/chat", headers=headers, json={"query": query})
+        assert resp.status_code == 200, (query, resp.text)
+        assert resp.json()["answer"]
+
+
 def test_chat_blocks_injection(client, make_token):
     resp = client.post(
         "/api/v1/chat",

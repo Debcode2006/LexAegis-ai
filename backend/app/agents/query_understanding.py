@@ -34,7 +34,23 @@ _INTENT_KEYWORDS = {
 
 _ENTITY_RE = re.compile(r"\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)\b")
 _QUOTED_RE = re.compile(r"[\"“']([^\"”']{3,60})[\"”']")
-_CLAUSE_REF_RE = re.compile(r"\b(?:clause|section|article)\s+[0-9IVXLC.]+\b", re.I)
+# The whole reference ("Section 3", "Clause 4.2") is the entity, so the entire
+# pattern is wrapped in a capturing group. The alternation stays non-capturing.
+_CLAUSE_REF_RE = re.compile(r"\b((?:clause|section|article)\s+[0-9IVXLC.]+)\b", re.I)
+
+
+def _match_text(match: "re.Match[str]") -> str:
+    """Return a regex match's entity text.
+
+    Uses capture group 1 when the pattern defines one, otherwise falls back to
+    the full match. `match.lastindex is None` exactly when there is no capturing
+    group, so this can never raise ``IndexError: no such group`` regardless of
+    how a future pattern is written.
+    """
+
+    if match.lastindex is not None:
+        return match.group(1)
+    return match.group(0)
 
 
 class QueryUnderstandingAgent:
@@ -109,14 +125,21 @@ class QueryUnderstandingAgent:
 
     @staticmethod
     def _extract_entities(query: str) -> List[str]:
+        # Entity extraction is best-effort metadata; it must never break the
+        # request. Any unexpected matching error degrades to "no entities"
+        # rather than propagating an HTTP 500.
         entities: List[str] = []
-        entities.extend(m.group(1) for m in _CLAUSE_REF_RE.finditer(query))
-        entities.extend(m.group(1) for m in _QUOTED_RE.finditer(query))
-        # Proper-noun-ish multi-word capitalized spans (skip sentence-initial only).
-        for m in _ENTITY_RE.finditer(query):
-            span = m.group(1)
-            if " " in span or span.isupper():
-                entities.append(span)
+        try:
+            entities.extend(_match_text(m) for m in _CLAUSE_REF_RE.finditer(query))
+            entities.extend(_match_text(m) for m in _QUOTED_RE.finditer(query))
+            # Proper-noun-ish multi-word capitalized spans (skip sentence-initial only).
+            for m in _ENTITY_RE.finditer(query):
+                span = _match_text(m)
+                if " " in span or span.isupper():
+                    entities.append(span)
+        except (re.error, IndexError) as exc:
+            logger.warning("Entity extraction failed for query %r: %s", query, exc)
+            return []
         # De-duplicate, preserve order.
         seen = set()
         unique = []
