@@ -33,11 +33,15 @@ from app.middleware.tenant import TenantMiddleware
 async def lifespan(app: FastAPI):
     logger = get_logger("app.lifespan")
     settings = get_settings()
+    from app.observability.tracing import init_observability
+
+    tracing_active = init_observability()
     logger.info(
-        "Starting %s (env=%s, version=%s)",
+        "Starting %s (env=%s, version=%s, tracing=%s)",
         settings.app_name,
         settings.environment.value,
         __version__,
+        "phoenix" if tracing_active else "local",
     )
     yield
     logger.info("Shutting down %s", settings.app_name)

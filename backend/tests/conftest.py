@@ -71,14 +71,23 @@ def make_token(jwt_secret: str):
 def client():
     from fastapi.testclient import TestClient
 
+    from app.cache.semantic_cache import get_semantic_cache
     from app.main import create_app
+    from app.observability.tracing import get_trace_recorder
     from app.retrieval.sparse import get_bm25_index
     from app.retrieval.vector_store import get_vector_store
     from app.services.document_registry import get_document_registry
     from app.services.rate_limiter import get_rate_limiter
 
     # Reset all in-memory singletons between tests for isolation.
-    for obj in (get_rate_limiter(), get_vector_store(), get_bm25_index(), get_document_registry()):
+    for obj in (
+        get_rate_limiter(),
+        get_vector_store(),
+        get_bm25_index(),
+        get_document_registry(),
+        get_semantic_cache(),
+        get_trace_recorder(),
+    ):
         if hasattr(obj, "reset"):
             obj.reset()  # type: ignore[attr-defined]
 

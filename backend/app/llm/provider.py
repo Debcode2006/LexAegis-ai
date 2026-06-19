@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+from app.cache.semantic_cache import SemanticCache, get_semantic_cache, normalize_key
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.llm.base import ChatMessage, LLMClient, LLMError, LLMResponse
@@ -26,10 +27,12 @@ class LLMProvider:
         self,
         primary: Optional[LLMClient] = None,
         fallback: Optional[LLMClient] = None,
+        cache: Optional[SemanticCache] = None,
     ) -> None:
         settings = get_settings().ollama
         self._primary = primary or OllamaClient(settings.primary_model)
         self._fallback = fallback or OllamaClient(settings.fallback_model)
+        self._cache = cache or get_semantic_cache()
 
     @property
     def primary_model(self) -> str:
@@ -47,10 +50,19 @@ class LLMProvider:
         max_tokens: Optional[int] = None,
         stop: Optional[List[str]] = None,
     ) -> LLMResponse:
+        # LLM-output cache: keyed on model + full conversation.
+        serialized = "\n".join(f"{m.role.value}:{m.content}" for m in messages)
+        cache_key = normalize_key("llm", self._primary.model, serialized)
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         try:
-            return self._primary.chat(
+            response = self._primary.chat(
                 messages, temperature=temperature, max_tokens=max_tokens, stop=stop
             )
+            self._cache.set(cache_key, response)
+            return response
         except LLMError as exc:
             logger.warning(
                 "Primary model '%s' failed; falling back to '%s': %s",
@@ -58,9 +70,11 @@ class LLMProvider:
                 self._fallback.model,
                 exc,
             )
-            return self._fallback.chat(
+            response = self._fallback.chat(
                 messages, temperature=temperature, max_tokens=max_tokens, stop=stop
             )
+            self._cache.set(cache_key, response)
+            return response
 
 
 _provider: Optional[LLMProvider] = None

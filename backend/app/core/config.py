@@ -214,10 +214,17 @@ class ObservabilitySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="OBSERVABILITY_", extra="ignore")
 
     phoenix_endpoint: str = Field(default="http://localhost:6006")
+    # OTLP collector endpoint Phoenix listens on (gRPC default 4317).
+    otlp_endpoint: str = Field(default="http://localhost:6006/v1/traces")
     enable_tracing: bool = Field(default=True)
     service_name: str = Field(default="lexaegis-ai")
+    trace_buffer_size: int = Field(default=200, ge=1, description="In-proc recent-span buffer.")
     gptcache_dir: str = Field(default="./.data/gptcache")
     enable_semantic_cache: bool = Field(default=True)
+    # backend: gptcache (production) | memory (light/local/test) | off
+    cache_backend: str = Field(default="memory")
+    cache_similarity_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
+    cache_max_entries: int = Field(default=1000, ge=1)
 
 
 class Settings(BaseSettings):
@@ -251,6 +258,10 @@ class Settings(BaseSettings):
     enforce_tenant_isolation: bool = Field(default=True)
 
     # --- Nested subsystem settings -------------------------------------------
+    # --- Evaluation -----------------------------------------------------------
+    evaluation_dataset_path: str = Field(default="../evaluation/datasets/legal_benchmark.json")
+    evaluation_results_path: str = Field(default="../evaluation/results/latest.json")
+
     # --- Agent orchestration --------------------------------------------------
     # orchestrator: "langgraph" (production) | "sequential" (no LangGraph dep).
     agent_orchestrator: str = Field(default="langgraph")

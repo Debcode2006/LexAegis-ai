@@ -68,6 +68,11 @@ class _Context:
 class LegalChunker:
     """Section/clause/heading-aware chunker."""
 
+    # Blocks shorter than this (e.g. a bare section title like "CONFIDENTIALITY")
+    # are merged into the following block so they never become standalone chunks
+    # that pollute retrieval/reranking.
+    min_block_chars = 28
+
     def __init__(
         self,
         max_chars: Optional[int] = None,
@@ -80,7 +85,7 @@ class LegalChunker:
     # -- public API -----------------------------------------------------------
 
     def chunk_document(self, document: RawDocument) -> List[Chunk]:
-        blocks = self._build_blocks(document)
+        blocks = self._merge_small_blocks(self._build_blocks(document))
         chunks: List[Chunk] = []
         index = 0
         for block in blocks:
@@ -181,6 +186,48 @@ class LegalChunker:
             return ("heading", line.strip().title(), "")
 
         return None
+
+    def _merge_small_blocks(self, blocks: List[_Block]) -> List[_Block]:
+        """Fold tiny blocks (bare section titles) into the next content block.
+
+        The tiny block's text is prepended to the following block, but the
+        following block's (more specific) section/clause/page metadata is kept,
+        so the title stays searchable without becoming a standalone chunk.
+        """
+
+        merged: List[_Block] = []
+        pending = ""
+        for block in blocks:
+            text = (pending + "\n" + block.text).strip() if pending else block.text
+            pending = ""
+            if len(text.strip()) < self.min_block_chars:
+                pending = text
+                continue
+            merged.append(
+                _Block(
+                    text=text,
+                    section=block.section,
+                    clause=block.clause,
+                    heading=block.heading,
+                    page_number=block.page_number,
+                )
+            )
+        if pending.strip():
+            if merged:
+                last = merged[-1]
+                merged[-1] = _Block(
+                    text=(last.text + "\n" + pending).strip(),
+                    section=last.section,
+                    clause=last.clause,
+                    heading=last.heading,
+                    page_number=last.page_number,
+                )
+            else:
+                merged.append(
+                    _Block(text=pending.strip(), section=None, clause=None,
+                           heading=None, page_number=blocks[0].page_number if blocks else 1)
+                )
+        return merged
 
     # -- size pass ------------------------------------------------------------
 

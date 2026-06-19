@@ -36,6 +36,7 @@ from app.agents.state import AgentState
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.llm.provider import LLMProvider
+from app.observability.tracing import span
 from app.retrieval.pipeline import HybridRetriever
 
 logger = get_logger(__name__)
@@ -62,7 +63,7 @@ class LegalAgentWorkflow:
         provider: Optional[LLMProvider] = None,
         retriever: Optional[HybridRetriever] = None,
     ) -> None:
-        self._nodes: Dict[str, Node] = {
+        raw_nodes: Dict[str, Node] = {
             "guard": InputGuardAgent().run,
             "query_understanding": QueryUnderstandingAgent(provider=provider).run,
             "planner": PlannerAgent().run,
@@ -73,8 +74,20 @@ class LegalAgentWorkflow:
             "confidence": ConfidenceAgent().run,
             "output_safety": OutputSafetyAgent().run,
         }
+        # Wrap every node in a trace span so per-agent latency is observable.
+        self._nodes: Dict[str, Node] = {
+            name: self._traced(name, fn) for name, fn in raw_nodes.items()
+        }
         self._orchestrator = get_settings().agent_orchestrator.lower()
         self._compiled = None
+
+    @staticmethod
+    def _traced(name: str, fn: Node) -> Node:
+        def wrapper(state: AgentState) -> Dict:
+            with span(f"agent.{name}", {"tenant_id": state.tenant_id}):
+                return fn(state)
+
+        return wrapper
 
     # -- public API -----------------------------------------------------------
 

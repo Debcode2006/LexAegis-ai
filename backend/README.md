@@ -4,8 +4,9 @@ Production-style **Agentic Legal RAG** backend: FastAPI gateway → safety layer
 hybrid retrieval → an 8-agent LangGraph workflow that returns **grounded, cited,
 confidence-scored** legal answers.
 
-Built and verified through **Phase 3**. Phase 4 (observability, evaluation,
-frontend, Docker) is layered on next.
+Built and verified through **local validation** (all six layers). Includes
+observability (Phoenix/OpenInference), semantic caching (GPTCache), and an
+evaluation suite (RAGAS/DeepEval). Dockerization is intentionally deferred.
 
 ---
 
@@ -98,6 +99,8 @@ backend/app/
       auth.py                 # GET /auth/whoami
       documents.py            # POST /documents/upload, GET /documents
       chat.py                 # POST /chat
+      observability.py        # GET /observability/metrics, /traces
+      evaluation.py           # GET /evaluation/results
   llm/
     base.py / ollama_client.py / provider.py   # LLM abstraction (Qwen3 + Llama3.1 fallback)
   ingestion/
@@ -122,7 +125,12 @@ backend/app/
     guard.py · query_understanding.py · planner.py · retrieval_agent.py
     reasoning.py · citation.py · groundedness.py · confidence.py · output_safety_agent.py
     graph.py                  # LegalAgentWorkflow (LangGraph + sequential fallback)
-tests/                        # 50 tests across config, auth, retrieval, safety, agents, endpoints
+  observability/
+    tracing.py                # Phoenix/OpenInference exporter + in-proc span recorder
+  cache/
+    semantic_cache.py         # GPTCache (prod) + memory LRU (light) + hit/miss stats
+tests/                        # 57 tests across config, auth, retrieval, safety, agents,
+                              # endpoints, observability, caching, evaluation
 ```
 
 ---
@@ -142,6 +150,9 @@ optional `X-Tenant-ID` header must match it when tenant isolation is enforced.
 | POST | `/documents/upload` | ✅ | Multipart upload (`file`, `document_type`) → ingest |
 | GET | `/documents` | ✅ | List documents ingested for the tenant |
 | POST | `/chat` | ✅ | Ask a grounded legal question |
+| GET | `/observability/metrics` | ✅ | Cache + trace summary metrics |
+| GET | `/observability/traces` | ✅ | Recent spans (latency, attributes) |
+| GET | `/evaluation/results` | ✅ | Latest evaluation report |
 
 ### The `/ping` test route
 
@@ -221,7 +232,7 @@ tuning, and safety thresholds are all env-configurable.
 ```bash
 cd backend
 pip install pytest pytest-asyncio numpy rank-bm25 langgraph langchain-core
-pytest                 # 50 passed
+pytest                 # 57 passed
 ```
 
 The suite uses the **light backends** and mints local HS256 tokens, so it runs
