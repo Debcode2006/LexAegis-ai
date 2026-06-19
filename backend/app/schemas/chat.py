@@ -12,6 +12,14 @@ from app.agents.state import Citation, ConfidenceBreakdown
 class ChatRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=4000)
     include_trace: bool = Field(default=False, description="Return the agent trace.")
+    document_ids: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "Optional retrieval scope. When omitted or empty, search all of the "
+            "tenant's documents. When provided, restrict hybrid retrieval (dense "
+            "+ sparse) to these document_ids only."
+        ),
+    )
 
 
 class GroundednessInfo(BaseModel):

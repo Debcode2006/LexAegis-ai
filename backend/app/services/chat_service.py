@@ -10,7 +10,7 @@ Bridges the HTTP layer and the agent workflow:
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
 from app.agents.graph import LegalAgentWorkflow, get_workflow
 from app.agents.state import AgentState
@@ -28,14 +28,28 @@ class ChatService:
         self._workflow = workflow or get_workflow()
         self._cache = cache or get_semantic_cache()
 
-    def answer(self, query: str, tenant_id: str, *, include_trace: bool = False) -> ChatResponse:
-        cache_key = normalize_key("chat", tenant_id, query)
+    def answer(
+        self,
+        query: str,
+        tenant_id: str,
+        *,
+        include_trace: bool = False,
+        document_ids: Optional[List[str]] = None,
+    ) -> ChatResponse:
+        # Normalize empty list -> None ("all documents"); keep responses for
+        # different retrieval scopes from colliding in the cache.
+        document_ids = document_ids or None
+        scope_key = "all" if not document_ids else ",".join(sorted(document_ids))
+        cache_key = normalize_key("chat", tenant_id, query, scope_key)
         cached = self._cache.get(cache_key)
         if cached is not None and not include_trace:
             return cached
 
-        with span("chat.turn", {"tenant_id": tenant_id, "query_len": len(query)}) as attrs:
-            state: AgentState = self._workflow.run(query, tenant_id)
+        with span(
+            "chat.turn",
+            {"tenant_id": tenant_id, "query_len": len(query), "scoped": bool(document_ids)},
+        ) as attrs:
+            state: AgentState = self._workflow.run(query, tenant_id, document_ids=document_ids)
             attrs["intent"] = state.intent.value
             attrs["confidence"] = state.confidence
             attrs["blocked"] = state.blocked

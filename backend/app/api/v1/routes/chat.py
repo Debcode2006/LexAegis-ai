@@ -22,4 +22,9 @@ async def chat(
     tenant_id: str = Depends(get_current_tenant),
     service: ChatService = Depends(get_chat_service),
 ) -> ChatResponse:
-    return service.answer(payload.query, tenant_id, include_trace=payload.include_trace)
+    return service.answer(
+        payload.query,
+        tenant_id,
+        include_trace=payload.include_trace,
+        document_ids=payload.document_ids,
+    )

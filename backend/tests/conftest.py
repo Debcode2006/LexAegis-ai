@@ -14,23 +14,31 @@ import jwt
 import pytest
 
 # Configure a hermetic test environment before any app import triggers settings.
+#
+# These are FORCED (not setdefault) so the suite stays deterministic even when a
+# third-party pytest plugin loads the developer's `backend/.env` into os.environ
+# before this conftest runs. (deepeval and langsmith both register pytest plugins
+# that call load_dotenv(); if `.env` were allowed to win, its SUPABASE_JWT_SECRET
+# would not match the token signer below and every authenticated test would 401.)
 _TEST_JWT_SECRET = "test-jwt-secret-please-change"
-os.environ.setdefault("ENVIRONMENT", "local")
-os.environ.setdefault("LOG_JSON", "false")
-os.environ.setdefault("SUPABASE_JWT_SECRET", _TEST_JWT_SECRET)
-os.environ.setdefault("SUPABASE_JWT_AUDIENCE", "authenticated")
-os.environ.setdefault("RATE_LIMIT_USER_REQUESTS", "5")
-os.environ.setdefault("RATE_LIMIT_USER_WINDOW_SECONDS", "60")
-os.environ.setdefault("RATE_LIMIT_BURST_MULTIPLIER", "1.0")
-
-# Phase 2: select light, deterministic backends so the full retrieval/safety
-# pipeline runs in tests without downloading models or running services.
-os.environ.setdefault("EMBEDDING_BACKEND", "hashing")
-os.environ.setdefault("EMBEDDING_DIMENSION", "256")
-os.environ.setdefault("RETRIEVAL_VECTOR_STORE", "memory")
-os.environ.setdefault("RETRIEVAL_RERANKER_BACKEND", "lexical")
-os.environ.setdefault("SAFETY_PII_BACKEND", "regex")
-os.environ.setdefault("SAFETY_INPUT_GUARD_BACKEND", "heuristic")
+_TEST_ENV = {
+    "ENVIRONMENT": "local",
+    "LOG_JSON": "false",
+    "SUPABASE_JWT_SECRET": _TEST_JWT_SECRET,
+    "SUPABASE_JWT_AUDIENCE": "authenticated",
+    "RATE_LIMIT_USER_REQUESTS": "5",
+    "RATE_LIMIT_USER_WINDOW_SECONDS": "60",
+    "RATE_LIMIT_BURST_MULTIPLIER": "1.0",
+    # Phase 2: light, deterministic backends so the full retrieval/safety
+    # pipeline runs in tests without downloading models or running services.
+    "EMBEDDING_BACKEND": "hashing",
+    "EMBEDDING_DIMENSION": "256",
+    "RETRIEVAL_VECTOR_STORE": "memory",
+    "RETRIEVAL_RERANKER_BACKEND": "lexical",
+    "SAFETY_PII_BACKEND": "regex",
+    "SAFETY_INPUT_GUARD_BACKEND": "heuristic",
+}
+os.environ.update(_TEST_ENV)
 
 
 @pytest.fixture(scope="session")

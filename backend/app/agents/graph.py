@@ -91,8 +91,15 @@ class LegalAgentWorkflow:
 
     # -- public API -----------------------------------------------------------
 
-    def run(self, query: str, tenant_id: str) -> AgentState:
-        state = AgentState(query=query, tenant_id=tenant_id)
+    def run(
+        self,
+        query: str,
+        tenant_id: str,
+        document_ids: Optional[List[str]] = None,
+    ) -> AgentState:
+        state = AgentState(
+            query=query, tenant_id=tenant_id, document_ids=document_ids or None
+        )
         if self._orchestrator == "langgraph":
             compiled = self._build_langgraph()
             if compiled is not None:

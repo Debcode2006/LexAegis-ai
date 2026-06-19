@@ -29,7 +29,11 @@ class VectorStore(Protocol):
         ...
 
     def search(
-        self, query_embedding: List[float], tenant_id: str, top_k: int
+        self,
+        query_embedding: List[float],
+        tenant_id: str,
+        top_k: int,
+        document_ids: Optional[List[str]] = None,
     ) -> List[ScoredChunk]:
         ...
 
@@ -75,11 +79,18 @@ class InMemoryVectorStore(VectorStore):
         return dot / (na * nb)
 
     def search(
-        self, query_embedding: List[float], tenant_id: str, top_k: int
+        self,
+        query_embedding: List[float],
+        tenant_id: str,
+        top_k: int,
+        document_ids: Optional[List[str]] = None,
     ) -> List[ScoredChunk]:
+        doc_filter = set(document_ids) if document_ids else None
         scored: List[Tuple[float, str]] = []
         for chunk_id, (vec, _text, meta) in self._items.items():
             if meta.get("tenant_id") != tenant_id:
+                continue
+            if doc_filter is not None and meta.get("document_id") not in doc_filter:
                 continue
             scored.append((self._cosine(query_embedding, vec), chunk_id))
         scored.sort(key=lambda x: x[0], reverse=True)
@@ -136,14 +147,29 @@ class ChromaVectorStore(VectorStore):
             metadatas=[c.metadata.to_store_dict() for c in chunks],
         )
 
+    @staticmethod
+    def _where_clause(tenant_id: str, document_ids: Optional[List[str]]) -> Dict:
+        """Build a Chroma metadata filter: tenant isolation, optionally scoped to
+        a set of document_ids. Multiple conditions must be combined with `$and`.
+        """
+
+        tenant_cond = {"tenant_id": tenant_id}
+        if not document_ids:
+            return tenant_cond
+        return {"$and": [tenant_cond, {"document_id": {"$in": list(document_ids)}}]}
+
     def search(
-        self, query_embedding: List[float], tenant_id: str, top_k: int
+        self,
+        query_embedding: List[float],
+        tenant_id: str,
+        top_k: int,
+        document_ids: Optional[List[str]] = None,
     ) -> List[ScoredChunk]:
         collection = self._ensure_collection()
         res = collection.query(
             query_embeddings=[query_embedding],
             n_results=top_k,
-            where={"tenant_id": tenant_id},
+            where=self._where_clause(tenant_id, document_ids),
         )
         results: List[ScoredChunk] = []
         ids = (res.get("ids") or [[]])[0]

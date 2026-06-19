@@ -86,3 +86,74 @@ def test_tenant_isolation_in_retrieval(retriever):
     result = retriever.retrieve("secret data", tenant_id="acme")
     ids = [s.chunk.chunk_id for s in result.chunks]
     assert "b" not in ids
+
+
+def _doc_chunk(cid: str, text: str, doc: str, tenant: str = "acme") -> Chunk:
+    return Chunk(
+        chunk_id=cid,
+        text=text,
+        metadata=ChunkMetadata(
+            document_id=doc,
+            document_name=f"{doc}.txt",
+            tenant_id=tenant,
+            document_type=DocumentType.CONTRACT,
+            chunk_index=0,
+        ),
+    )
+
+
+@pytest.fixture
+def scoped_retriever():
+    r = HybridRetriever(
+        embedder=HashingEmbedder(dimension=256),
+        vector_store=InMemoryVectorStore(),
+        bm25=BM25Index(),
+        reranker=LexicalReranker(),
+    )
+    r.index_chunks([
+        _doc_chunk("c1", "The confidentiality clause requires secrecy for five years.", "docA"),
+        _doc_chunk("c2", "The limitation of liability excludes indirect damages.", "docB"),
+        _doc_chunk("c3", "Termination requires thirty days written notice.", "docC"),
+    ])
+    return r
+
+
+def test_retrieval_scope_restricts_to_selected_documents(scoped_retriever):
+    # Scope to docB only — results must never include chunks from other docs.
+    result = scoped_retriever.retrieve(
+        "liability clause", tenant_id="acme", document_ids=["docB"]
+    )
+    assert result.chunks
+    assert {s.chunk.metadata.document_id for s in result.chunks} == {"docB"}
+
+
+def test_retrieval_scope_multiple_documents(scoped_retriever):
+    result = scoped_retriever.retrieve(
+        "clause notice damages", tenant_id="acme", document_ids=["docA", "docC"]
+    )
+    docs = {s.chunk.metadata.document_id for s in result.chunks}
+    assert docs <= {"docA", "docC"}
+    assert "docB" not in docs
+
+
+def test_retrieval_scope_none_searches_all_documents(scoped_retriever):
+    # Backward compatibility: omitting document_ids searches everything.
+    result = scoped_retriever.retrieve("clause notice damages", tenant_id="acme")
+    docs = {s.chunk.metadata.document_id for s in result.chunks}
+    assert len(docs) >= 2
+
+
+def test_retrieval_scope_unknown_document_returns_empty(scoped_retriever):
+    result = scoped_retriever.retrieve(
+        "confidentiality", tenant_id="acme", document_ids=["does-not-exist"]
+    )
+    assert result.chunks == []
+
+
+def test_bm25_and_vector_store_respect_document_scope(scoped_retriever):
+    # Filtering is applied to BOTH dense and sparse legs (counts reflect scope).
+    result = scoped_retriever.retrieve(
+        "confidentiality", tenant_id="acme", document_ids=["docA"]
+    )
+    assert result.dense_count >= 1
+    assert all(s.chunk.metadata.document_id == "docA" for s in result.chunks)

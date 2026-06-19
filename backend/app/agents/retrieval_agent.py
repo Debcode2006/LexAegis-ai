@@ -23,7 +23,11 @@ class RetrievalAgent:
         self._retriever = retriever or get_retriever()
 
     def run(self, state: AgentState) -> Dict[str, Any]:
-        result = self._retriever.retrieve(state.query_for_retrieval(), tenant_id=state.tenant_id)
+        result = self._retriever.retrieve(
+            state.query_for_retrieval(),
+            tenant_id=state.tenant_id,
+            document_ids=state.document_ids,
+        )
         state.log(
             "retrieval",
             dense=result.dense_count,
@@ -31,5 +35,6 @@ class RetrievalAgent:
             fused=result.fused_count,
             returned=len(result.chunks),
             reranked=result.reranked,
+            scoped_documents=len(state.document_ids) if state.document_ids else 0,
         )
         return {"retrieval": result, "trace": state.trace}

@@ -61,15 +61,24 @@ class HybridRetriever:
 
     # -- read path ------------------------------------------------------------
 
-    def retrieve(self, query: str, tenant_id: str) -> RetrievalResult:
+    def retrieve(
+        self,
+        query: str,
+        tenant_id: str,
+        document_ids: Optional[List[str]] = None,
+    ) -> RetrievalResult:
         cfg = get_settings().retrieval
 
-        # 1. Dense retrieval.
+        # 1. Dense retrieval (scoped to document_ids when provided).
         query_vec = self._embedder.embed_query(query)
-        dense = self._store.search(query_vec, tenant_id=tenant_id, top_k=cfg.dense_top_k)
+        dense = self._store.search(
+            query_vec, tenant_id=tenant_id, top_k=cfg.dense_top_k, document_ids=document_ids
+        )
 
-        # 2. Sparse retrieval.
-        sparse = self._bm25.search(query, tenant_id=tenant_id, top_k=cfg.sparse_top_k)
+        # 2. Sparse retrieval (same document scope).
+        sparse = self._bm25.search(
+            query, tenant_id=tenant_id, top_k=cfg.sparse_top_k, document_ids=document_ids
+        )
 
         # 3. Reciprocal Rank Fusion.
         fused = reciprocal_rank_fusion(dense, sparse, k=cfg.rrf_k)

@@ -26,6 +26,11 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# The Python `lib/` rule above unintentionally matches the frontend source
+# directory `frontend/lib/`; keep that tracked (it holds app code, not build output).
+!frontend/lib/
+!frontend/lib/**
+
 # PyInstaller
 #   Usually these files are written by a python script from a template
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
@@ -217,4 +222,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-.env.example
+.env.local
+
+.deepeval
+
+.next

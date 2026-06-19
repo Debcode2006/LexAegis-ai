@@ -57,20 +57,34 @@ class BM25Index:
         self._models[tenant_id] = model
         return model
 
-    def search(self, query: str, tenant_id: str, top_k: int) -> List[ScoredChunk]:
+    def search(
+        self,
+        query: str,
+        tenant_id: str,
+        top_k: int,
+        document_ids: Optional[List[str]] = None,
+    ) -> List[ScoredChunk]:
         with self._lock:
             model = self._model_for(tenant_id)
             corpus = self._corpus.get(tenant_id, [])
         if model is None or not corpus:
             return []
 
+        doc_filter = set(document_ids) if document_ids else None
         scores = model.get_scores(_tokenize(query))
-        ranked = sorted(range(len(corpus)), key=lambda i: scores[i], reverse=True)[:top_k]
-        return [
-            ScoredChunk(chunk=corpus[i], sparse_score=float(scores[i]))
-            for i in ranked
-            if scores[i] > 0
-        ]
+        # Rank over the full tenant corpus (BM25 statistics stay intact), then
+        # keep the top_k that fall within the requested document scope.
+        order = sorted(range(len(corpus)), key=lambda i: scores[i], reverse=True)
+        results: List[ScoredChunk] = []
+        for i in order:
+            if scores[i] <= 0:
+                continue
+            if doc_filter is not None and corpus[i].metadata.document_id not in doc_filter:
+                continue
+            results.append(ScoredChunk(chunk=corpus[i], sparse_score=float(scores[i])))
+            if len(results) >= top_k:
+                break
+        return results
 
     def count(self, tenant_id: Optional[str] = None) -> int:
         if tenant_id is None:

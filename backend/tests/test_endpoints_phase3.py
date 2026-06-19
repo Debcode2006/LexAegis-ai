@@ -102,6 +102,62 @@ def test_chat_section_reference_does_not_500(client, make_token):
         assert resp.json()["answer"]
 
 
+SAMPLE_DOC_2 = b"""EMPLOYMENT POLICY HANDBOOK
+
+Section 1. REMOTE WORK
+1.1 Employees may work remotely up to three days per week with manager approval.
+
+Section 2. VACATION
+2.1 Employees accrue twenty days of paid vacation per calendar year.
+"""
+
+
+def test_chat_scoped_to_selected_document(client, make_token):
+    headers = _auth(make_token)
+    up1 = client.post(
+        "/api/v1/documents/upload",
+        headers=headers,
+        files={"file": ("msa.txt", SAMPLE_DOC, "text/plain")},
+        data={"document_type": "contract"},
+    ).json()
+    client.post(
+        "/api/v1/documents/upload",
+        headers=headers,
+        files={"file": ("handbook.txt", SAMPLE_DOC_2, "text/plain")},
+        data={"document_type": "policy"},
+    )
+
+    # Scope retrieval to the contract only; citations must come from it alone.
+    resp = client.post(
+        "/api/v1/chat",
+        headers=headers,
+        json={"query": "What are the confidentiality terms?", "document_ids": [up1["document_id"]]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["blocked"] is False
+    for citation in body["citations"]:
+        assert citation["document_id"] == up1["document_id"]
+
+
+def test_chat_empty_document_ids_searches_all(client, make_token):
+    # Backward compatibility: an empty list behaves like "all documents".
+    headers = _auth(make_token)
+    client.post(
+        "/api/v1/documents/upload",
+        headers=headers,
+        files={"file": ("msa.txt", SAMPLE_DOC, "text/plain")},
+        data={"document_type": "contract"},
+    )
+    resp = client.post(
+        "/api/v1/chat",
+        headers=headers,
+        json={"query": "What does the confidentiality clause require?", "document_ids": []},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["answer"]
+
+
 def test_chat_blocks_injection(client, make_token):
     resp = client.post(
         "/api/v1/chat",

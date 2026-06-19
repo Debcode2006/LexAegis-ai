@@ -65,6 +65,9 @@ class AgentState(BaseModel):
     query: str
     tenant_id: str
     masked_query: Optional[str] = None
+    # Optional retrieval scope: restrict retrieval to these document_ids. None or
+    # empty means "all documents for the tenant".
+    document_ids: Optional[List[str]] = None
 
     # Layer 2 — input safety
     input_safety: Optional[SafetyVerdict] = None
