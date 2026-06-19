@@ -1,0 +1,19 @@
+# ============================================================================
+# LexAegis AI — OFFLINE EVALUATION dependencies
+#
+# Used ONLY by the scripts in `evaluation/` (run_ragas.py, run_deepeval.py).
+# Install these in a SEPARATE virtualenv from the backend runtime:
+#
+#     python -m venv .venv-eval
+#     .venv-eval/Scripts/activate      # (Windows)  or  source .venv-eval/bin/activate
+#     pip install -r backend/requirements-eval.txt
+#
+# Why separate: ragas + deepeval pull langchain / langchain-community /
+# langchain-openai, openai, datasets, and require newer pydantic (>=2.13) than
+# the runtime pins (2.10.4). Co-installing them with the backend runtime is
+# unsatisfiable — which is exactly why the original combined requirements.txt
+# failed to resolve. The backend never imports these at request time.
+# ============================================================================
+
+ragas==0.4.3
+deepeval==4.0.6

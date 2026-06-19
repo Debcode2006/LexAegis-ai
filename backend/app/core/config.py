@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from enum import Enum
 from functools import lru_cache
+from pathlib import Path
 from typing import List
 
 from pydantic import Field, SecretStr, field_validator
@@ -29,6 +30,35 @@ from typing_extensions import Annotated
 # Comma-separated env lists: `NoDecode` disables pydantic-settings' default JSON
 # decoding so our `mode="before"` validators receive the raw string and split it.
 CsvList = Annotated[List[str], NoDecode]
+
+# --- Deterministic .env resolution ------------------------------------------
+# The .env file is resolved *relative to this module*, never relative to the
+# current working directory. This guarantees identical behaviour whether the
+# process is launched by uvicorn (from backend/), a script (from the repo root),
+# pytest (from CI), or a container/Railway (from /app). config.py lives at
+# backend/app/core/config.py, so parents[2] is the backend/ directory.
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+ENV_FILE = BACKEND_DIR / ".env"
+
+
+def _config(**overrides: object) -> SettingsConfigDict:
+    """Shared settings config: every model (top-level *and* nested) loads from
+    the same absolute `.env` path.
+
+    Declaring `env_file` on the nested models too is essential: nested settings
+    are built via `default_factory`, which constructs them independently — if
+    they did not name `env_file` they would read only `os.environ` and silently
+    miss `.env` values (e.g. SUPABASE_JWT_SECRET).
+    """
+
+    base: dict = dict(
+        env_file=str(ENV_FILE),
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
+    base.update(overrides)
+    return SettingsConfigDict(**base)  # type: ignore[arg-type]
 
 
 class Environment(str, Enum):
@@ -57,7 +87,7 @@ class SupabaseSettings(BaseSettings):
     The auth layer auto-selects based on which value is present.
     """
 
-    model_config = SettingsConfigDict(env_prefix="SUPABASE_", extra="ignore")
+    model_config = _config(env_prefix="SUPABASE_")
 
     url: str = Field(default="", description="Supabase project URL.")
     anon_key: SecretStr = Field(default=SecretStr(""), description="Public anon key.")
@@ -87,7 +117,7 @@ class RateLimitSettings(BaseSettings):
     per-tenant limits are enforced independently; a request must satisfy both.
     """
 
-    model_config = SettingsConfigDict(env_prefix="RATE_LIMIT_", extra="ignore")
+    model_config = _config(env_prefix="RATE_LIMIT_")
 
     enabled: bool = Field(default=True)
     backend: str = Field(default="memory", description="memory | redis")
@@ -108,7 +138,7 @@ class RateLimitSettings(BaseSettings):
 class OllamaSettings(BaseSettings):
     """LLM (Ollama) configuration — declared now, consumed in Phase 2."""
 
-    model_config = SettingsConfigDict(env_prefix="OLLAMA_", extra="ignore")
+    model_config = _config(env_prefix="OLLAMA_")
 
     base_url: str = Field(default="http://localhost:11434")
     primary_model: str = Field(default="qwen3")
@@ -121,7 +151,7 @@ class OllamaSettings(BaseSettings):
 class ChromaSettings(BaseSettings):
     """Vector database (ChromaDB) configuration — consumed in Phase 2."""
 
-    model_config = SettingsConfigDict(env_prefix="CHROMA_", extra="ignore")
+    model_config = _config(env_prefix="CHROMA_")
 
     host: str = Field(default="localhost")
     port: int = Field(default=8001, ge=1, le=65535)
@@ -133,7 +163,7 @@ class ChromaSettings(BaseSettings):
 class EmbeddingSettings(BaseSettings):
     """Embedding + reranker model configuration — consumed in Phase 2."""
 
-    model_config = SettingsConfigDict(env_prefix="EMBEDDING_", extra="ignore")
+    model_config = _config(env_prefix="EMBEDDING_")
 
     dense_model: str = Field(default="BAAI/bge-large-en-v1.5")
     reranker_model: str = Field(default="BAAI/bge-reranker-large")
@@ -152,7 +182,7 @@ class EmbeddingSettings(BaseSettings):
 class RetrievalSettings(BaseSettings):
     """Hybrid retrieval tuning — consumed in Phase 2/3."""
 
-    model_config = SettingsConfigDict(env_prefix="RETRIEVAL_", extra="ignore")
+    model_config = _config(env_prefix="RETRIEVAL_")
 
     dense_top_k: int = Field(default=20, ge=1)
     sparse_top_k: int = Field(default=20, ge=1)
@@ -173,7 +203,7 @@ class RetrievalSettings(BaseSettings):
 class SafetySettings(BaseSettings):
     """Safety subsystem configuration — consumed in Phase 2."""
 
-    model_config = SettingsConfigDict(env_prefix="SAFETY_", extra="ignore")
+    model_config = _config(env_prefix="SAFETY_")
 
     llama_guard_model: str = Field(default="llama-guard3")
     enable_input_safety: bool = Field(default=True)
@@ -211,7 +241,7 @@ class SafetySettings(BaseSettings):
 class ObservabilitySettings(BaseSettings):
     """Phoenix + caching configuration — consumed in Phase 3/4."""
 
-    model_config = SettingsConfigDict(env_prefix="OBSERVABILITY_", extra="ignore")
+    model_config = _config(env_prefix="OBSERVABILITY_")
 
     phoenix_endpoint: str = Field(default="http://localhost:6006")
     # OTLP collector endpoint Phoenix listens on (gRPC default 4317).
@@ -230,12 +260,7 @@ class ObservabilitySettings(BaseSettings):
 class Settings(BaseSettings):
     """Top-level application settings aggregating all subsystem configs."""
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-        case_sensitive=False,
-    )
+    model_config = _config()
 
     # --- Application metadata -------------------------------------------------
     app_name: str = Field(default="LexAegis AI")
@@ -294,3 +319,20 @@ def get_settings() -> Settings:
     """Return the process-wide cached Settings instance."""
 
     return Settings()
+
+
+def config_status() -> dict:
+    """Non-secret summary of how configuration resolved, for startup logging.
+
+    Never returns secret *values* — only booleans indicating presence and the
+    resolved `.env` path. Safe to log.
+    """
+
+    settings = get_settings()
+    sup = settings.supabase
+    return {
+        "jwt_secret_loaded": bool(sup.jwt_secret.get_secret_value()),
+        "jwks_configured": bool(sup.jwks_url),
+        "env_file_path": str(ENV_FILE),
+        "env_file_exists": ENV_FILE.is_file(),
+    }

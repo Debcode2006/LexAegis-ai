@@ -33,7 +33,12 @@ from app.middleware.tenant import TenantMiddleware
 async def lifespan(app: FastAPI):
     logger = get_logger("app.lifespan")
     settings = get_settings()
+    from app.core.startup import run_startup_checks
     from app.observability.tracing import init_observability
+
+    # Emit configuration diagnostics + validate subsystems before serving so
+    # missing deps/config surface as clear warnings, never as obscure crashes.
+    run_startup_checks()
 
     tracing_active = init_observability()
     logger.info(
