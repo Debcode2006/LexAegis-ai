@@ -1,0 +1,78 @@
+# ============================================================================
+# MODE B — PRODUCTION (self-hosted compose; mirrors the Railway topology)
+#
+#   Frontend container  -> :3000
+#   Backend container   -> :8000   (LLM_PROVIDER=gemini, NO Ollama)
+#   Chroma container    -> internal only, persistent volume
+#   LLM                 -> Gemini API (https://generativelanguage.googleapis.com)
+#
+# Supabase is NOT containerized. There is NO Ollama in production.
+#
+# Usage:
+#   1) cp deployment/production.env.example deployment/production.env
+#      # fill in GEMINI_API_KEY, Supabase, CORS_ORIGINS, NEXT_PUBLIC_* ...
+#   2) docker compose --env-file deployment/production.env \
+#        -f docker-compose.production.yml up -d --build
+# ============================================================================
+
+services:
+  chroma:
+    image: chromadb/chroma:1.0.0
+    container_name: lexaegis-chroma
+    # No host port published: only the backend (same network) needs it.
+    expose:
+      - "8000"
+    volumes:
+      - chroma_data:/data
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    healthcheck:
+      test: ["CMD", "/bin/sh", "-c", "curl -fsS http://localhost:8000/api/v2/heartbeat || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lexaegis-backend
+    env_file:
+      - ./deployment/production.env   # GEMINI_API_KEY, Supabase, etc.
+    environment:
+      - ENVIRONMENT=production
+      - LLM_PROVIDER=gemini
+      - RETRIEVAL_VECTOR_STORE=chroma
+      - CHROMA_USE_HTTP_CLIENT=true
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend_data:/app/.data
+    depends_on:
+      chroma:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    container_name: lexaegis-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  chroma_data:
+  backend_data:

@@ -1,0 +1,87 @@
+# ============================================================================
+# MODE A — LOCAL DEVELOPMENT
+#
+#   Frontend container  -> http://localhost:3000
+#   Backend container   -> http://localhost:8000
+#   Chroma container    -> http://localhost:8001  (persistent volume)
+#   LLM                 -> HOST Ollama at host.docker.internal:11434
+#
+# Supabase is NOT containerized (managed service). Ollama runs on your HOST
+# machine (`ollama serve`), and the backend reaches it via host.docker.internal.
+#
+# Usage:
+#   1) cp .env.example backend/.env        # fill in Supabase + keep LLM_PROVIDER=ollama
+#   2) docker compose -f docker-compose.local.yml up -d --build
+#   3) open http://localhost:3000
+# ============================================================================
+
+services:
+  chroma:
+    image: chromadb/chroma:1.0.0
+    container_name: lexaegis-chroma
+    ports:
+      - "8001:8000"            # host 8001 -> container 8000 (Chroma's port)
+    volumes:
+      - chroma_data:/data       # persistence: survives restarts AND rebuilds
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    healthcheck:
+      test: ["CMD", "/bin/sh", "-c", "curl -fsS http://localhost:8000/api/v2/heartbeat || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lexaegis-backend
+    env_file:
+      - ./backend/.env           # your local secrets (Supabase, etc.)
+    environment:
+      # --- These OVERRIDE .env so the container networking is always correct ---
+      - ENVIRONMENT=local
+      - LLM_PROVIDER=ollama
+      # Reach Ollama running on the HOST (not in a container):
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      # Talk to the Chroma container over the compose network:
+      - RETRIEVAL_VECTOR_STORE=chroma
+      - CHROMA_USE_HTTP_CLIENT=true
+      - CHROMA_HOST=chroma
+      - CHROMA_PORT=8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend_data:/app/.data  # gptcache + any local fallback state
+    extra_hosts:
+      # Makes host.docker.internal resolve on Linux too (it is built-in on
+      # Docker Desktop for Windows/Mac).
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      chroma:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Browser talks to the backend on the HOST port mapping, not the
+        # compose service name (the browser is outside the Docker network).
+        NEXT_PUBLIC_API_BASE: http://localhost:8000/api/v1
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    container_name: lexaegis-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  chroma_data:                   # named volume -> docker volume ls
+  backend_data:
