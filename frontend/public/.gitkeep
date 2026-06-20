@@ -1,0 +1,3 @@
+# Keeps the `public/` directory present so the Docker build's
+# `COPY --from=builder /app/public ./public` step always succeeds.
+# Put static assets (favicon, images, robots.txt) here.

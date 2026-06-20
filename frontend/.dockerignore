@@ -1,0 +1,21 @@
+# Keep the build context small; deps + build artifacts are produced in-image.
+node_modules/
+.next/
+out/
+build/
+
+# Local secrets & env — public values are passed as build args instead.
+.env
+.env.*
+!.env.local.example
+
+# Tooling caches / editor / OS noise
+.turbo/
+.vscode/
+.idea/
+.DS_Store
+*.log
+npm-debug.log*
+
+# Build info that should not invalidate the image cache
+tsconfig.tsbuildinfo

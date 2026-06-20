@@ -341,9 +341,7 @@ export default function ChatPage() {
               </div>
             ))
           )}
-          {loading && (
-            <p className="text-sm text-slate-400">Thinking…</p>
-          )}
+          {loading && <ThinkingIndicator />}
           <div ref={bottomRef} />
         </div>
 
@@ -367,6 +365,50 @@ export default function ChatPage() {
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
       </section>
+    </div>
+  );
+}
+
+// Stages mirror the backend agent pipeline order so the wait feels alive while
+// the single blocking /chat request runs (no server streaming yet).
+const THINKING_STAGES = [
+  "Checking input safety",
+  "Understanding your question",
+  "Retrieving relevant clauses",
+  "Re-ranking sources",
+  "Reasoning over the documents",
+];
+
+function ThinkingIndicator() {
+  const [stage, setStage] = useState(0);
+  const [seconds, setSeconds] = useState(0);
+
+  // Elapsed-time counter.
+  useEffect(() => {
+    const timer = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Walk the early stages on a timer, then dwell on the last (reasoning) stage,
+  // which is where most of the latency actually is.
+  useEffect(() => {
+    if (stage >= THINKING_STAGES.length - 1) return;
+    const id = setTimeout(() => setStage((s) => s + 1), stage === 0 ? 800 : 1600);
+    return () => clearTimeout(id);
+  }, [stage]);
+
+  return (
+    <div className="flex items-center gap-3 text-sm text-slate-500" aria-live="polite">
+      <span className="flex gap-1">
+        <span className="h-2 w-2 animate-bounce rounded-full bg-brand [animation-delay:-0.3s]" />
+        <span className="h-2 w-2 animate-bounce rounded-full bg-brand [animation-delay:-0.15s]" />
+        <span className="h-2 w-2 animate-bounce rounded-full bg-brand" />
+      </span>
+      <span>
+        {THINKING_STAGES[stage]}
+        <span className="animate-pulse">…</span>
+        <span className="ml-2 text-xs text-slate-400">{seconds}s</span>
+      </span>
     </div>
   );
 }
