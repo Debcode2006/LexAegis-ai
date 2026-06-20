@@ -27,6 +27,21 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# JWT algorithm families. HS* are symmetric (verified with the shared
+# SUPABASE_JWT_SECRET); the rest are asymmetric and verified against the project
+# JWKS. Supabase's modern "JWT signing keys" issue ES256 (ECC P-256) tokens by
+# default — RSA keys issue RS256 — so the JWKS path must accept the whole
+# asymmetric family, not only RS256.
+_HS_ALGS = frozenset({"HS256", "HS384", "HS512"})
+_ASYMMETRIC_ALGS = frozenset(
+    {
+        "RS256", "RS384", "RS512",
+        "ES256", "ES384", "ES512",
+        "PS256", "PS384", "PS512",
+        "EdDSA",
+    }
+)
+
 
 class SupabaseAuthenticator:
     """Verify Supabase-issued JWTs and build the request `Principal`."""
@@ -57,14 +72,6 @@ class SupabaseAuthenticator:
 
     def _decode(self, token: str) -> Dict[str, Any]:
         sup = self._settings.supabase
-        options = {"verify_aud": bool(sup.jwt_audience)}
-        common_kwargs: Dict[str, Any] = {
-            "algorithms": sup.jwt_algorithms,
-            "audience": sup.jwt_audience or None,
-            "options": options,
-        }
-        if sup.jwt_issuer:
-            common_kwargs["issuer"] = sup.jwt_issuer
 
         try:
             header = jwt.get_unverified_header(token)
@@ -72,18 +79,66 @@ class SupabaseAuthenticator:
             raise AuthenticationError("Malformed token header.") from exc
 
         algorithm = header.get("alg", "")
+        configured = set(sup.jwt_algorithms)
+
+        # Select the verification mode from the token's own alg, then scope the
+        # PyJWT `algorithms` allowlist to exactly that mode's family. Passing both
+        # families to every decode (the previous behaviour) is what produced
+        # "The specified alg value is not allowed": Supabase issues ES256, which
+        # was absent from the configured [HS256, RS256] list, so PyJWT rejected
+        # the token BEFORE checking its signature. Per-mode scoping also closes an
+        # algorithm-confusion gap (an HS-family alg must never be accepted on the
+        # public-key path, and vice versa).
+        if algorithm in _ASYMMETRIC_ALGS:
+            if self._jwks() is None:
+                raise AuthenticationError(
+                    f"Asymmetric ({algorithm}) token received but SUPABASE_JWKS_URL "
+                    "is not configured."
+                )
+            mode = "jwks"
+            # The JWKS is the real trust anchor (only keys Supabase publishes can
+            # validate). Allow the operator-pinned asymmetric algs PLUS this
+            # token's own (already known-asymmetric) alg, so enabling the JWKS URL
+            # works even when SUPABASE_JWT_ALGORITHMS still lists only HS256,RS256.
+            allowed = sorted((configured & _ASYMMETRIC_ALGS) | {algorithm})
+        else:
+            mode = "shared_secret"
+            # Strict: only the operator-configured HS algs. Never auto-widen here —
+            # that blocks the alg="none" attack and HS/asymmetric confusion.
+            allowed = sorted(configured & _HS_ALGS) or ["HS256"]
+
+        logger.debug(
+            "JWT verify routing: token_alg=%s mode=%s allowed_algorithms=%s",
+            algorithm or "<none>",
+            mode,
+            allowed,
+        )
+
+        decode_kwargs: Dict[str, Any] = {
+            "algorithms": allowed,
+            "audience": sup.jwt_audience or None,
+            "options": {"verify_aud": bool(sup.jwt_audience)},
+        }
+        if sup.jwt_issuer:
+            decode_kwargs["issuer"] = sup.jwt_issuer
 
         try:
-            if algorithm.startswith("RS") or algorithm.startswith("ES"):
+            if mode == "jwks":
                 signing_key = self._get_signing_key(token)
-                return jwt.decode(token, signing_key, **common_kwargs)
+                return jwt.decode(token, signing_key, **decode_kwargs)
 
             secret = sup.jwt_secret.get_secret_value()
             if not secret:
                 raise AuthenticationError("HS256 token received but no JWT secret configured.")
-            return jwt.decode(token, secret, **common_kwargs)
+            return jwt.decode(token, secret, **decode_kwargs)
         except InvalidTokenError as exc:
-            logger.info("JWT verification failed: %s", exc)
+            logger.warning(
+                "JWT verification failed: %s (token_alg=%s mode=%s allowed_algorithms=%s)",
+                exc,
+                algorithm or "<none>",
+                mode,
+                allowed,
+            )
             raise AuthenticationError("Invalid or expired token.") from exc
 
     def _get_signing_key(self, token: str) -> Any:

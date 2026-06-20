@@ -100,7 +100,10 @@ class SupabaseSettings(BaseSettings):
     jwks_url: str = Field(default="", description="JWKS endpoint for RS256 verification.")
     jwt_audience: str = Field(default="authenticated", description="Expected JWT `aud`.")
     jwt_issuer: str = Field(default="", description="Expected JWT `iss` (optional).")
-    jwt_algorithms: CsvList = Field(default_factory=lambda: ["HS256", "RS256"])
+    # ES256 included because Supabase's modern asymmetric "JWT signing keys"
+    # issue ES256 (ECC P-256) access tokens by default. The auth layer scopes
+    # this allowlist per verification mode (HS* vs JWKS) at decode time.
+    jwt_algorithms: CsvList = Field(default_factory=lambda: ["HS256", "RS256", "ES256"])
 
     @field_validator("jwt_algorithms", mode="before")
     @classmethod
