@@ -40,8 +40,11 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # Build context is the REPO ROOT (mirrors Railway, so the single Dockerfile
+      # works in both places). The Dockerfile lives in backend/ and COPYs only
+      # backend/ into the image.
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: lexaegis-backend
     env_file:
       - ./deployment/production.env   # GEMINI_API_KEY, Supabase, etc.
@@ -52,10 +55,16 @@ services:
       - CHROMA_USE_HTTP_CLIENT=true
       - CHROMA_HOST=chroma
       - CHROMA_PORT=8000
+      # Evaluation report (offline artifact) — bind-mounted below. On Railway,
+      # which builds only ./backend, see the deployment guide for how to populate
+      # the Evaluation Dashboard (bake latest.json or run eval as a job).
+      - EVALUATION_RESULTS_PATH=/app/evaluation/results/latest.json
+      - EVALUATION_DATASET_PATH=/app/evaluation/datasets/legal_benchmark.json
     ports:
       - "8000:8000"
     volumes:
       - backend_data:/app/.data
+      - ./evaluation:/app/evaluation:ro
     depends_on:
       chroma:
         condition: service_healthy
@@ -65,10 +74,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # Compose reads these from the shell env or the file passed via
+      # --env-file (see docs). They are baked into the bundle at BUILD time.
       args:
-        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE}
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
     container_name: lexaegis-frontend
     ports:
       - "3000:3000"

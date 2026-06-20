@@ -31,7 +31,10 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
-COPY requirements.txt ./
+# NOTE: the build context is the REPO ROOT (Railway builds from the root with
+# `-f backend/Dockerfile`, and both compose files set `context: .`). All COPY
+# paths are therefore relative to the repo root and must be prefixed `backend/`.
+COPY backend/requirements.txt ./
 # IMPORTANT: install CPU-only PyTorch FIRST, from the dedicated CPU wheel index.
 # sentence-transformers + FlagEmbedding depend on torch; the DEFAULT Linux torch
 # wheel bundles CUDA and drags in multi-GB nvidia_*_cu13 packages we never use
@@ -58,7 +61,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
-COPY . /app
+# Copy ONLY the backend subtree into the image (context is the repo root, so a
+# bare `COPY . /app` would also drag in frontend/, docs/, .git/ etc.).
+COPY backend/ /app
 
 # Persistent data (chroma PersistentClient fallback, gptcache) lives here; the
 # compose file mounts a volume over it. Owned by the non-root runtime user.
@@ -70,7 +75,7 @@ EXPOSE 8000
 # Liveness/readiness for orchestrators (compose, Railway). Hits the FastAPI
 # health route through the same port the app serves on.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=5 \
-    CMD curl -fsS http://localhost:8000/api/v1/health || exit 1
+    CMD curl -fsS http://localhost:${PORT:-8000}/api/v1/health || exit 1
 
 # Invoked via `sh` so the script runs regardless of the file's exec bit (the
 # build context may come from a Windows checkout that doesn't preserve +x).

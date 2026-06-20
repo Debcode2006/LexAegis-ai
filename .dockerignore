@@ -1,0 +1,53 @@
+# ============================================================================
+# Build context = REPO ROOT (Railway builds from root with -f backend/Dockerfile,
+# and both compose files set `context: .`). Docker reads THIS file — the root
+# .dockerignore — to trim the context; backend/.dockerignore is NOT consulted
+# when the context is the repo root. Keep this in sync with backend/.dockerignore.
+#
+# The backend image COPYs only `backend/`, so we aggressively drop everything
+# else to keep uploads small and builds fast.
+# ============================================================================
+
+# VCS / CI / docs — never needed in the image.
+.git/
+.github/
+docs/
+deployment/
+*.md
+
+# Frontend has its own Dockerfile + build context.
+frontend/
+node_modules/
+
+# Offline-eval artifacts are bind-mounted at runtime, never baked in.
+evaluation/
+
+# Python noise anywhere in the tree.
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Local virtualenvs — deps are installed fresh in the image.
+**/.venv/
+**/venv/
+**/env/
+
+# Local secrets & state — NEVER bake into an image.
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/.data/
+**/*.sqlite
+**/*.sqlite3
+
+# Tests are not needed at runtime.
+backend/tests/
+
+# Editor / OS noise.
+.vscode/
+.idea/
+.DS_Store
+**/*.log

@@ -78,13 +78,24 @@ not running or not installed correctly — repeat Steps 1–2.
 From the **repository root** (`lexaegis-ai/`):
 
 ```bash
-# 1. Create the backend env file and fill in Supabase keys.
+# 1. Backend secrets (Supabase, LLM). Keep LLM_PROVIDER=ollama for local dev.
 cp .env.example backend/.env
-#    (open backend/.env in an editor; keep LLM_PROVIDER=ollama for local dev)
+#    (open backend/.env in an editor and fill SUPABASE_* values)
 
-# 2. Build all images (frontend, backend). First build downloads a lot — be patient.
+# 2. Frontend public values for the BUILD. Docker Compose reads the repo-root
+#    `.env` for ${...} substitution — NOT frontend/.env.local — so create it:
+cp .env.docker.example .env
+#    (open .env and set NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY)
+
+# 3. Build all images (frontend, backend). First build downloads a lot — be patient.
 docker compose -f docker-compose.local.yml build
 ```
+
+> **Why a root `.env` and not `frontend/.env.local`?** `frontend/.env.local` is a
+> **Next.js** file, only read when you run the frontend natively (`npm run dev`).
+> **Docker Compose** substitutes `${NEXT_PUBLIC_*}` from your shell or the
+> repo-root `.env`. They're different mechanisms — see the "Environment setup"
+> section at the end of this guide.
 
 > Local mode uses **Ollama on your host**. In a separate terminal run
 > `ollama serve` and make sure you've pulled the models once:
@@ -222,6 +233,41 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu
 
 Result: **no GPU packages**, ~3–4 GB smaller image, much faster and more reliable
 builds. No GPU is required to run LexAegis anywhere — local **or** production.
+
+## Environment setup — the three contexts (read this!)
+
+The `NEXT_PUBLIC_*` values confuse everyone at first because **three different
+tools read environment variables from three different places**:
+
+| Context | What runs the frontend | Reads frontend env from | Reads backend env from |
+|---|---|---|---|
+| **Local dev (no Docker)** | `npm run dev` in `frontend/` | `frontend/.env.local` | `backend/.env` |
+| **Docker local** | the frontend container | repo-root **`.env`** (Compose `${...}`) | `backend/.env` (`env_file`) |
+| **Vercel production** | Vercel's build | Vercel **Project → Environment Variables** | Railway **Variables** |
+
+Key rules:
+- **`frontend/.env.local` is ONLY for native `npm run dev`.** Docker Compose
+  never reads it. (This is the bug you hit.)
+- For **Docker local**, put the frontend's public values in the **repo-root
+  `.env`** (`cp .env.docker.example .env`). Compose substitutes them into the
+  build args.
+  - Alternative one-off: `docker compose --env-file frontend/.env.local -f docker-compose.local.yml up -d --build`.
+- `NEXT_PUBLIC_*` are **baked at build time** — after changing them, rebuild the
+  frontend: `docker compose -f docker-compose.local.yml up -d --build frontend`.
+- For **Vercel**, you don't use any file — you set the variables in the Vercel
+  dashboard. See [DEPLOYMENT_GUIDE_BEGINNER.md](DEPLOYMENT_GUIDE_BEGINNER.md).
+
+## Evaluation Dashboard in Docker
+
+The Evaluation page reads a static report at
+`evaluation/results/latest.json`, produced by the **offline** eval harness
+(`python evaluation/evaluate_local.py`). That folder lives outside the backend
+image, so the local compose **bind-mounts** it into the container at
+`/app/evaluation` and points `EVALUATION_RESULTS_PATH` there. Re-run the harness
+on the host and refresh the page — no rebuild needed. If you see "No evaluation
+report yet", the file simply hasn't been generated; it is **not** an error.
+
+---
 
 Next: [DOCKER_DESKTOP_GUIDE.md](DOCKER_DESKTOP_GUIDE.md) for the point-and-click
 version of all of this.

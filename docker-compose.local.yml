@@ -40,8 +40,11 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # Build context is the REPO ROOT (matches how Railway builds, so the one
+      # Dockerfile works in both places). The Dockerfile lives in backend/ and
+      # COPYs only backend/ into the image.
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: lexaegis-backend
     env_file:
       - ./backend/.env           # your local secrets (Supabase, etc.)
@@ -56,10 +59,19 @@ services:
       - CHROMA_USE_HTTP_CLIENT=true
       - CHROMA_HOST=chroma
       - CHROMA_PORT=8000
+      # Evaluation report lives OUTSIDE the backend build context, so it is not
+      # baked into the image. We bind-mount it (below) and point the API at the
+      # absolute in-container path so the Evaluation Dashboard works in Docker.
+      - EVALUATION_RESULTS_PATH=/app/evaluation/results/latest.json
+      - EVALUATION_DATASET_PATH=/app/evaluation/datasets/legal_benchmark.json
     ports:
       - "8000:8000"
     volumes:
       - backend_data:/app/.data  # gptcache + any local fallback state
+      # Read-only mount of the offline-eval artifacts (generated on the host by
+      # `python evaluation/evaluate_local.py`). Re-running it updates the
+      # dashboard live — no rebuild needed.
+      - ./evaluation:/app/evaluation:ro
     extra_hosts:
       # Makes host.docker.internal resolve on Linux too (it is built-in on
       # Docker Desktop for Windows/Mac).
@@ -77,8 +89,14 @@ services:
         # Browser talks to the backend on the HOST port mapping, not the
         # compose service name (the browser is outside the Docker network).
         NEXT_PUBLIC_API_BASE: http://localhost:8000/api/v1
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        # IMPORTANT: these come from Docker Compose's interpolation source — the
+        # shell environment or a `.env` file IN THIS DIRECTORY (repo root).
+        # Compose does NOT read frontend/.env.local (that's a Next.js-only file).
+        # Create the root .env first:  cp .env.docker.example .env
+        # (`:-` gives an empty default so the build doesn't warn/abort if unset;
+        #  Supabase login just won't work until you fill it in.)
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
     container_name: lexaegis-frontend
     ports:
       - "3000:3000"
