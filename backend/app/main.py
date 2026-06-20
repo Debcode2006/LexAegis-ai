@@ -69,17 +69,43 @@ def create_app() -> FastAPI:
     )
 
     # Middleware is applied bottom-up: the last added runs first (outermost).
-    # We want request-context outermost so every log line is correlated.
+    # Order (outer->inner): RequestContext -> CORS -> Tenant -> router/auth. CORS
+    # sits ABOVE Tenant and the route dependencies, so it answers preflight
+    # OPTIONS itself and short-circuits before auth ever runs. A preflight that
+    # returns 400 therefore means CORS rejected it (origin/method/headers not
+    # allowed) — NOT an auth failure.
+    cors_origins = list(settings.cors_origins)
+    cors_origin_regex = settings.cors_origin_regex or None
+
+    # `allow_credentials=True` is incompatible with a wildcard origin: browsers
+    # refuse "Access-Control-Allow-Origin: *" on credentialed requests, and
+    # Starlette won't echo the caller's origin in that mode. Disable credentials
+    # if someone configures "*" so the wildcard at least works for simple calls.
+    allow_credentials = "*" not in cors_origins
+    if not allow_credentials:
+        get_logger("app.cors").warning(
+            "CORS_ORIGINS contains '*': disabling allow_credentials (wildcard + "
+            "credentials is rejected by browsers). Set explicit origins to use cookies/auth."
+        )
+
     app.add_middleware(TenantMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
+        allow_origins=cors_origins,
+        allow_origin_regex=cors_origin_regex,
+        allow_credentials=allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["X-Request-ID"],
     )
     app.add_middleware(RequestContextMiddleware)
+
+    get_logger("app.cors").info(
+        "CORS configured: origins=%s origin_regex=%s allow_credentials=%s",
+        cors_origins,
+        cors_origin_regex or "<none>",
+        allow_credentials,
+    )
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)

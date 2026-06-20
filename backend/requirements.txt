@@ -51,6 +51,15 @@ ollama==0.5.1
 # --- Safety (Phase 2) -------------------------------------------------------
 presidio-analyzer==2.2.362
 presidio-anonymizer==2.2.362
+# spaCy NER model for Presidio, pinned + installed at BUILD time. Without this,
+# Presidio tries to `spacy download en_core_web_lg` on first use AT RUNTIME — which
+# fails on Railway because /opt/venv is root-owned and the app runs as the non-root
+# `appuser` (OSError: Permission denied), crashing the upload worker. en_core_web_sm
+# (~12 MB) keeps the image lean and matches spaCy 3.8.x. The app pins Presidio to
+# THIS model via SAFETY_PRESIDIO_SPACY_MODEL (see app/safety/pii.py), so the larger
+# default model is never requested. Swap to en_core_web_lg here + in that env var
+# if you want maximum NER accuracy.
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
 # --- Observability: trace EXPORT only (Phase 3) ----------------------------
 # The app exports OTLP spans to an external Phoenix collector; it does not run

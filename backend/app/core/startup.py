@@ -56,6 +56,25 @@ def collect_startup_warnings() -> List[str]:
             "still works, but Supabase server-side calls will fail."
         )
 
+    # --- CORS ----------------------------------------------------------------
+    # A browser SPA on another origin (e.g. Vercel) cannot call the API unless its
+    # origin is allow-listed. When that origin is missing, the browser's preflight
+    # OPTIONS gets a 400 ("Disallowed CORS origin") BEFORE auth — looking like the
+    # backend "broke" even though the request never reached a route.
+    non_local_origins = [
+        o for o in settings.cors_origins if "localhost" not in o and "127.0.0.1" not in o
+    ]
+    if settings.is_production and not non_local_origins and not settings.cors_origin_regex:
+        warnings.append(
+            "CORS allowlist has no non-local origin in production "
+            f"(CORS_ORIGINS={list(settings.cors_origins)}). The deployed frontend's "
+            "cross-origin requests will fail preflight with HTTP 400 before reaching "
+            "any route.\n"
+            "  Fix: set CORS_ORIGINS to your exact frontend origin, no trailing slash "
+            "(e.g. https://your-app.vercel.app), and/or CORS_ORIGIN_REGEX for preview "
+            "deploys (e.g. https://your-app-.*\\.vercel\\.app)."
+        )
+
     # --- Vector store / ChromaDB --------------------------------------------
     if settings.retrieval.vector_store == "chroma" and _missing("chromadb"):
         warnings.append(
@@ -293,6 +312,8 @@ def run_startup_checks() -> List[str]:
     # Required, non-secret startup diagnostics.
     logger.info("JWT Secret Loaded: %s", status["jwt_secret_loaded"])
     logger.info("JWKS Configured: %s", status["jwks_configured"])
+    logger.info("CORS Allowed Origins: %s", status["cors_origins"])
+    logger.info("CORS Origin Regex: %s", status["cors_origin_regex"] or "<none>")
     logger.info("Environment File Path: %s", status["env_file_path"])
     if not status["env_file_exists"]:
         logger.warning(

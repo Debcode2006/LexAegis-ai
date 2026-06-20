@@ -45,6 +45,12 @@ RUN pip install --upgrade pip && \
     pip install torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install -r requirements.txt
 
+# Fail the BUILD (never production) if the Presidio spaCy model is missing or
+# unloadable. The model is pinned in requirements.txt and installed above; this
+# asserts it actually landed in the venv so a bad pin surfaces here — during the
+# build, where retries are cheap — instead of crashing an upload after deploy.
+RUN python -c "import en_core_web_sm; en_core_web_sm.load(); print('spaCy en_core_web_sm OK')"
+
 # --- Stage 2: runtime -------------------------------------------------------
 FROM python:3.12-slim AS runtime
 

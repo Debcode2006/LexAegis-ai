@@ -245,6 +245,10 @@ class SafetySettings(BaseSettings):
     enable_output_safety: bool = Field(default=True)
     enable_pii_masking: bool = Field(default=True)
     presidio_language: str = Field(default="en")
+    # spaCy model Presidio loads for NER. Pinned EXPLICITLY (rather than letting
+    # Presidio default to en_core_web_lg) so the engine only ever loads a model
+    # that was installed at image-build time — never triggering a runtime download.
+    presidio_spacy_model: str = Field(default="en_core_web_sm")
     # Backend selectors: production defaults + light fallbacks for local/test.
     pii_backend: str = Field(default="presidio", description="presidio | regex")
     input_guard_backend: str = Field(default="llama_guard", description="llama_guard | heuristic")
@@ -310,7 +314,14 @@ class Settings(BaseSettings):
     log_json: bool = Field(default=True)
 
     # --- CORS -----------------------------------------------------------------
+    # Exact-match allowlist. Browsers send `Origin: scheme://host[:port]` with NO
+    # trailing slash, so configured values are normalized to match (a trailing
+    # slash is the most common silent cause of preflight 400s).
     cors_origins: CsvList = Field(default_factory=lambda: ["http://localhost:3000"])
+    # Optional regex for origins that are NOT fixed — e.g. Vercel preview deploys
+    # get a unique host per build (https://<app>-<hash>-<scope>.vercel.app) that a
+    # static list can't enumerate. Matched in addition to cors_origins.
+    cors_origin_regex: str = Field(default="")
 
     # --- Multi-tenancy --------------------------------------------------------
     default_tenant_id: str = Field(default="public")
@@ -352,7 +363,11 @@ class Settings(BaseSettings):
     @classmethod
     def _split_origins(cls, value: object) -> object:
         if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
+            value = [item.strip() for item in value.split(",") if item.strip()]
+        if isinstance(value, list):
+            # Drop trailing slashes so "https://app.vercel.app/" matches the
+            # browser's "Origin: https://app.vercel.app". "*" is left untouched.
+            return [o.rstrip("/") if o != "*" else o for o in value]
         return value
 
     @property
@@ -381,4 +396,6 @@ def config_status() -> dict:
         "jwks_configured": bool(sup.jwks_url),
         "env_file_path": str(ENV_FILE),
         "env_file_exists": ENV_FILE.is_file(),
+        "cors_origins": list(settings.cors_origins),
+        "cors_origin_regex": settings.cors_origin_regex or "",
     }

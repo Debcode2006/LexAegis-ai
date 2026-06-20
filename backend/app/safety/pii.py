@@ -74,13 +74,31 @@ class PresidioPIIDetector(PIIDetector):
     def __init__(self) -> None:
         self._cfg = get_settings().safety
         self._analyzer = None
+        # Set once if Presidio cannot be loaded, so we degrade to regex instead of
+        # re-attempting (and re-logging) a failing engine build on every page.
+        self._fallback: Optional[RegexPIIDetector] = None
 
     def _ensure_analyzer(self):
         if self._analyzer is not None:
             return self._analyzer
         from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
+        from presidio_analyzer.nlp_engine import NlpEngineProvider
 
-        analyzer = AnalyzerEngine()
+        # Pin the spaCy model EXPLICITLY. Presidio's default AnalyzerEngine() loads
+        # `en_core_web_lg` and, if it is absent, runs `spacy download` AT RUNTIME —
+        # which on Railway pip-installs into the root-owned /opt/venv while running
+        # as non-root `appuser`, fails with "Permission denied", and kills the
+        # worker. By naming a model that was installed at build time (requirements
+        # .txt) we both control accuracy/size and guarantee no runtime download.
+        lang = self._cfg.presidio_language
+        provider = NlpEngineProvider(
+            nlp_configuration={
+                "nlp_engine_name": "spacy",
+                "models": [{"lang_code": lang, "model_name": self._cfg.presidio_spacy_model}],
+            }
+        )
+        nlp_engine = provider.create_engine()
+        analyzer = AnalyzerEngine(nlp_engine=nlp_engine, supported_languages=[lang])
         # Register Indian identifier recognizers absent from Presidio defaults.
         analyzer.registry.add_recognizer(
             PatternRecognizer(
@@ -104,7 +122,24 @@ class PresidioPIIDetector(PIIDetector):
         return analyzer
 
     def analyze(self, text: str) -> List[PIIEntity]:
-        analyzer = self._ensure_analyzer()
+        if self._fallback is not None:
+            return self._fallback.analyze(text)
+        try:
+            analyzer = self._ensure_analyzer()
+        except (Exception, SystemExit) as exc:
+            # SystemExit because spacy.cli.download() calls sys.exit() on failure.
+            # Whatever the cause (missing model, read-only venv, network), PII
+            # masking must never crash an upload — degrade to the regex detector.
+            logger.warning(
+                "Presidio PII engine unavailable (%s). Falling back to the regex PII "
+                "detector so ingestion is not blocked. Install the spaCy model %r at "
+                "build time to restore full NER-based detection.",
+                exc,
+                self._cfg.presidio_spacy_model,
+            )
+            self._fallback = RegexPIIDetector(threshold=self._cfg.pii_score_threshold)
+            return self._fallback.analyze(text)
+
         results = analyzer.analyze(
             text=text,
             entities=self._cfg.pii_entities,
