@@ -32,23 +32,61 @@ class Reranker(Protocol):
         ...
 
 
+# Common English + legal-boilerplate words that carry no retrieval signal. Without
+# removing these, a query like "what is the payment amount ... in the agreement?" is
+# dominated by stopwords + ubiquitous terms ("agreement"), so unrelated clauses that
+# happen to share them outrank the actual payment clause.
+_STOPWORDS = frozenset(
+    """a an the of to in on at by for and or nor but is are was were be been being this
+    that these those it its as with within without into from out over under what which
+    who whom whose how when where why shall will would should may might can could must
+    any all each both either neither such per via herein hereof thereof hereto thereto
+    do does did has have had not no yes if then else than so very about specified set
+    forth pursuant accordance agreement""".split()
+)
+
+
 class LexicalReranker(Reranker):
-    """Token-overlap reranker (query coverage * idf-ish weighting)."""
+    """Token-overlap reranker, IDF-weighted and blended with the retrieval prior.
+
+    Pure surface overlap cannot bridge vocabulary gaps (query "payment amount /
+    deadline" vs clause "compensation … payable net thirty days"), and on its own it
+    lets stopword-rich distractors bury the right clause. Two guards fix that:
+
+    1. Stopword removal + IDF over the candidate set, so ubiquitous/boilerplate
+       terms contribute ~0 and only discriminative terms move the score.
+    2. A blend with the *retrieval prior* — chunks arrive already ordered by RRF
+       (dense + BM25). When lexical overlap is weak or empty (the vocabulary-gap
+       case), the semantic order is preserved instead of being overridden.
+    """
 
     def rerank(self, query: str, chunks: List[ScoredChunk], top_k: int) -> List[ScoredChunk]:
-        q_tokens = _TOKEN_RE.findall(query.lower())
-        q_set = set(q_tokens)
-        if not q_set:
-            return chunks[:top_k]
+        if not chunks:
+            return []
+        q_set = {t for t in _TOKEN_RE.findall(query.lower()) if t not in _STOPWORDS}
 
-        for scored in chunks:
-            doc_tokens = _TOKEN_RE.findall(scored.chunk.text.lower())
-            doc_set = set(doc_tokens)
-            overlap = q_set & doc_set
-            coverage = len(overlap) / len(q_set)
-            # Reward density of matches, dampened by length.
-            density = sum(doc_tokens.count(t) for t in overlap) / (1 + math.log1p(len(doc_tokens)))
-            scored.rerank_score = coverage * 0.7 + min(density, 1.0) * 0.3
+        doc_token_lists = [_TOKEN_RE.findall(s.chunk.text.lower()) for s in chunks]
+        n = len(chunks)
+        df = {t: 0 for t in q_set}
+        for tokens in doc_token_lists:
+            present = q_set & set(tokens)
+            for t in present:
+                df[t] += 1
+
+        def _idf(term: str) -> float:
+            # Smoothed IDF: a term in every candidate -> ~0; a rare term -> high.
+            return math.log((n + 1) / (df.get(term, 0) + 1)) + 1.0
+
+        q_weight = sum(_idf(t) for t in q_set) or 1.0
+
+        for idx, (scored, tokens) in enumerate(zip(chunks, doc_token_lists)):
+            token_set = set(tokens)
+            overlap = q_set & token_set
+            # IDF-weighted query coverage in [0, 1].
+            lexical = sum(_idf(t) for t in overlap) / q_weight
+            # Retrieval prior from the incoming (RRF) order, also in [0, 1].
+            prior = 1.0 - (idx / n) if n > 1 else 1.0
+            scored.rerank_score = 0.5 * prior + 0.5 * lexical
 
         ranked = sorted(chunks, key=lambda s: s.rerank_score or 0.0, reverse=True)
         return ranked[:top_k]

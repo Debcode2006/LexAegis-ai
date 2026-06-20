@@ -200,8 +200,12 @@ class EmbeddingSettings(BaseSettings):
 
     model_config = _config(env_prefix="EMBEDDING_")
 
-    dense_model: str = Field(default="BAAI/bge-large-en-v1.5")
-    reranker_model: str = Field(default="BAAI/bge-reranker-large")
+    # Defaults are sized for a memory-constrained host: bge-small loads in ~0.15GB
+    # vs ~1.3GB for bge-large, so a small Railway instance is not OOM-killed on the
+    # first upload. Override EMBEDDING_DENSE_MODEL / EMBEDDING_RERANKER_MODEL to
+    # scale up quality when more RAM is available (see deployment/production.env.example).
+    dense_model: str = Field(default="BAAI/bge-small-en-v1.5")
+    reranker_model: str = Field(default="BAAI/bge-reranker-base")
     device: str = Field(default="cpu", description="cpu | cuda")
     batch_size: int = Field(default=16, ge=1)
     normalize: bool = Field(default=True)
@@ -227,7 +231,10 @@ class RetrievalSettings(BaseSettings):
     dedup_threshold: float = Field(default=0.95, ge=0.0, le=1.0)
     # Stores / rerankers can be swapped for light local backends.
     vector_store: str = Field(default="chroma", description="chroma | memory")
-    reranker_backend: str = Field(default="bge", description="bge | lexical")
+    # 'lexical' (no model, zero extra RAM) by default so a small instance never
+    # OOMs. Set to 'bge' (loads EMBEDDING_RERANKER_MODEL, ~1.1-2.2GB) on a host
+    # with ≥2GB for cross-encoder reranking quality.
+    reranker_backend: str = Field(default="lexical", description="bge | lexical")
     enable_reranker: bool = Field(default=True)
     enable_compression: bool = Field(default=True)
     # Chunking controls.

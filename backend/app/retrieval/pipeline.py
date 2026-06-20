@@ -210,6 +210,17 @@ class HybridRetriever:
             stages.reranker_applied,
             stages.first_empty_stage(),
         )
+        # Before/after reranking, by section — makes a reranker that demotes the
+        # right clause obvious at a glance (e.g. payment clause present pre-rerank
+        # but dropped from `selected`).
+        def _sections(items: List[ScoredChunk]) -> List[Any]:
+            return [s.chunk.metadata.section for s in items]
+
+        logger.info(
+            "[RETRIEVAL] rerank reorder: before=%s after=%s",
+            _sections(stages.compressed[: cfg.rerank_top_k]),
+            _sections(stages.selected),
+        )
         for i, row in enumerate(top5, start=1):
             logger.info(
                 "[RETRIEVAL]   #%d doc=%s section=%s dense=%s bm25=%s rrf=%s rerank=%s",

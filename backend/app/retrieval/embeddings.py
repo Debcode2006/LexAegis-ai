@@ -3,8 +3,9 @@ Dense embedding backends.
 
 `Embedder` is the contract. Two implementations:
 
-- `BGEEmbedder`     — production: BAAI/bge-large-en-v1.5 via sentence-transformers.
-                      Applies the BGE query instruction prefix for retrieval.
+- `BGEEmbedder`     — production: a BAAI/bge-*-en-v1.5 model (default bge-small,
+                      configurable via EMBEDDING_DENSE_MODEL) via sentence-
+                      transformers. Applies the BGE query instruction prefix.
 - `HashingEmbedder` — deterministic, dependency-light hashing-trick embeddings.
                       Used for local/light mode and tests so the full pipeline
                       runs without downloading multi-GB models. Identical text
