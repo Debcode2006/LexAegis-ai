@@ -26,6 +26,13 @@ supabase==2.11.0
 python-dotenv==1.0.1
 
 # --- Retrieval (Phase 2) ----------------------------------------------------
+# NOTE: sentence-transformers + FlagEmbedding depend on `torch`. On Linux the
+# DEFAULT torch wheel is the CUDA build (pulls multi-GB nvidia_*_cu13 packages).
+# We run entirely on CPU (EMBEDDING_DEVICE=cpu), so the Docker image installs the
+# CPU-only wheel first via `--index-url https://download.pytorch.org/whl/cpu`
+# (see backend/Dockerfile). For a local CPU venv, do the same before installing
+# this file:
+#     pip install torch --index-url https://download.pytorch.org/whl/cpu
 chromadb==1.5.9
 sentence-transformers==5.6.0
 FlagEmbedding==1.4.0

@@ -27,7 +27,11 @@ services:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
     healthcheck:
-      test: ["CMD", "/bin/sh", "-c", "curl -fsS http://localhost:8000/api/v2/heartbeat || exit 1"]
+      # The stock chromadb/chroma image is a minimal Rust binary — it has NO
+      # curl/wget/python. It DOES ship bash, so we use bash's /dev/tcp pseudo
+      # device to confirm the server is accepting connections on its port (it
+      # binds the port only once ready to serve). No tools installed.
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/8000"]
       interval: 30s
       timeout: 5s
       retries: 5

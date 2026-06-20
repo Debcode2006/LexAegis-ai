@@ -204,6 +204,24 @@ docker compose -f docker-compose.local.yml up -d
 | Port already in use (`:3000`/`:8000`) | Another process uses it — stop it, or change the host port in the compose file. |
 | Frontend can't reach backend | `NEXT_PUBLIC_API_BASE` is baked at build — rebuild the frontend after changing it. |
 | Changes not showing | You changed code but didn't rebuild: `up -d --build`. |
+| Build downloads huge `nvidia_*_cu13` / `torch` GPU packages, or fails with `IncompleteRead` / `ProtocolError` | This was the **CUDA PyTorch** problem — fixed: the backend Dockerfile installs **CPU-only torch** first (see "Why the backend image is CPU-only" below). If you hit it, just rebuild: `docker compose -f docker-compose.local.yml build --no-cache backend`. |
+
+### Why the backend image is CPU-only PyTorch
+
+The backend uses BGE embeddings + reranker, which depend on **PyTorch**. On
+Linux, the default `pip install torch` grabs the **GPU (CUDA)** wheel — several
+gigabytes of `nvidia_*_cu13` packages — even though LexAegis runs entirely on
+**CPU** (`EMBEDDING_DEVICE=cpu`). That bloats the image and makes the download
+fragile (the `IncompleteRead`/`ProtocolError` you may have seen).
+
+`backend/Dockerfile` therefore installs the **CPU-only** wheel first:
+
+```dockerfile
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+```
+
+Result: **no GPU packages**, ~3–4 GB smaller image, much faster and more reliable
+builds. No GPU is required to run LexAegis anywhere — local **or** production.
 
 Next: [DOCKER_DESKTOP_GUIDE.md](DOCKER_DESKTOP_GUIDE.md) for the point-and-click
 version of all of this.

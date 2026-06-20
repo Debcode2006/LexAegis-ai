@@ -256,6 +256,13 @@ Assumes a free Railway account and the repo on GitHub.
 8. Note the Chroma service's **private** network name and set the backend's
    `CHROMA_HOST` to it (Railway services talk over the private network).
 
+> **Does Railway need the GPU PyTorch packages?** **No.** Railway runs the
+> backend on CPU; there is no GPU. The backend image installs **CPU-only torch**
+> (see `backend/Dockerfile`), so embeddings/reranker run on CPU and none of the
+> `nvidia_*_cu13` CUDA packages are installed. The Gemini provider itself needs no
+> torch at all — it's a REST call. The CPU image is smaller and builds faster,
+> which also keeps you within Railway's build limits.
+
 **Wire-up order**
 9. Deploy Chroma → deploy Backend (set `CHROMA_HOST`) → set Vercel
    `NEXT_PUBLIC_API_BASE` to the backend domain and redeploy frontend → add the
