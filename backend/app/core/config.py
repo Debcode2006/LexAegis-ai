@@ -23,7 +23,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import List
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from typing_extensions import Annotated
 
@@ -143,7 +143,39 @@ class OllamaSettings(BaseSettings):
     base_url: str = Field(default="http://localhost:11434")
     primary_model: str = Field(default="qwen3")
     fallback_model: str = Field(default="llama3.1")
-    request_timeout_seconds: int = Field(default=120, ge=1)
+    # Default per-call timeout (kept short so a hung/missing Ollama fails fast).
+    request_timeout_seconds: int = Field(default=15, ge=1)
+    # Reasoning generates long answers and may load the model into VRAM, so it
+    # gets its own, more generous timeout (the default above stays short).
+    reasoning_timeout_seconds: int = Field(default=90, ge=1)
+    temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=1024, ge=1)
+
+
+class GeminiSettings(BaseSettings):
+    """Google Gemini configuration — used when LLM_PROVIDER=gemini.
+
+    The Gemini client talks to the Generative Language REST API directly (httpx
+    only), mirroring the OllamaClient so no heavy SDK is added. `primary_model`
+    is used for reasoning/understanding; `fallback_model` is tried if the primary
+    call fails (e.g. transient 5xx / quota). Set `api_key` via GEMINI_API_KEY.
+    """
+
+    model_config = _config(env_prefix="GEMINI_")
+
+    api_key: SecretStr = Field(default=SecretStr(""), description="Google AI Studio API key.")
+    base_url: str = Field(default="https://generativelanguage.googleapis.com/v1beta")
+    # Gemini 2.5 Flash is the recommended production default (fast + cheap).
+    # Gemini 2.5 Pro is available for higher-quality reasoning (set GEMINI_MODEL).
+    # Accept both GEMINI_MODEL (the documented name) and GEMINI_PRIMARY_MODEL.
+    primary_model: str = Field(
+        default="gemini-2.5-flash",
+        validation_alias=AliasChoices("GEMINI_MODEL", "GEMINI_PRIMARY_MODEL"),
+    )
+    fallback_model: str = Field(default="gemini-2.5-flash")
+    request_timeout_seconds: int = Field(default=30, ge=1)
+    # Reasoning generates long answers, so it gets a more generous budget.
+    reasoning_timeout_seconds: int = Field(default=90, ge=1)
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1024, ge=1)
 
@@ -290,12 +322,23 @@ class Settings(BaseSettings):
     # --- Agent orchestration --------------------------------------------------
     # orchestrator: "langgraph" (production) | "sequential" (no LangGraph dep).
     agent_orchestrator: str = Field(default="langgraph")
-    use_llm_for_understanding: bool = Field(default=True)
+    # Inference backend selector. "ollama" (local dev) | "gemini" (production).
+    # Switching this is the ONLY change needed to move between local Ollama and
+    # the hosted Gemini API — no application code changes.
+    llm_provider: str = Field(default="ollama")
+    # Query understanding defaults to the deterministic heuristic: its output
+    # (intent/entities) is advisory only and does not change retrieval or the
+    # answer, so the LLM call is pure latency. Reasoning stays LLM-backed.
+    use_llm_for_understanding: bool = Field(default=False)
     use_llm_for_reasoning: bool = Field(default=True)
+    # Master switch for LlamaGuard input safety. When false, the fast regex
+    # heuristic guard is used instead (no ~20s/request Ollama call).
+    enable_llamaguard: bool = Field(default=True)
 
     supabase: SupabaseSettings = Field(default_factory=SupabaseSettings)
     rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
+    gemini: GeminiSettings = Field(default_factory=GeminiSettings)
     chroma: ChromaSettings = Field(default_factory=ChromaSettings)
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)

@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api.v1.routes import (
     auth,
     chat,
+    debug,
     documents,
     evaluation,
     health,
@@ -22,3 +23,5 @@ api_router.include_router(documents.router)
 api_router.include_router(chat.router)
 api_router.include_router(observability.router)
 api_router.include_router(evaluation.router)
+# Temporary retrieval-debugging route — remove with app/api/v1/routes/debug.py.
+api_router.include_router(debug.router)

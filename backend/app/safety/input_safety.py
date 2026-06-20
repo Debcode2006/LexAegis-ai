@@ -4,12 +4,16 @@ Input safety guarding.
 Screens inbound queries for prompt injection, jailbreak attempts, and unsafe
 requests before they reach retrieval or the reasoning LLM.
 
-- `LlamaGuardGuard` — production: LlamaGuard served via Ollama. The model
-  returns "safe" or "unsafe\\n<categories>"; we parse that into a verdict.
+- `ModelGuard`      — production: a model-backed classifier. Under
+  `LLM_PROVIDER=ollama` this is LlamaGuard3; under `LLM_PROVIDER=gemini` it is
+  the Gemini model used as a prompt classifier (Gemini also applies its own
+  built-in safety). The model returns "safe" or "unsafe\\n<categories>"; we parse
+  that into a verdict and fall back to the heuristic on any failure.
 - `HeuristicGuard`  — light/test fallback: curated regexes for the most common
   injection/jailbreak patterns. No model required.
 
-Selected via `SAFETY_INPUT_GUARD_BACKEND` (llama_guard | heuristic).
+Selected via `SAFETY_INPUT_GUARD_BACKEND` (llama_guard | heuristic) and the
+active `LLM_PROVIDER`.
 """
 
 from __future__ import annotations
@@ -74,15 +78,19 @@ _LLAMA_GUARD_PROMPT = (
 )
 
 
-class LlamaGuardGuard(InputSafetyGuard):
-    """LlamaGuard-backed guard served via Ollama."""
+class ModelGuard(InputSafetyGuard):
+    """Model-backed input guard (LlamaGuard via Ollama, or Gemini classifier).
+
+    The concrete client is built by the LLM factory from `LLM_PROVIDER`, so the
+    same guard works for local Ollama and production Gemini with no code change.
+    """
 
     def __init__(self, provider: Optional[LLMProvider] = None) -> None:
         self._cfg = get_settings().safety
-        # Use a dedicated client bound to the guard model.
-        from app.llm.ollama_client import OllamaClient
+        # Use a dedicated client bound to the guard model for the active provider.
+        from app.llm.factory import create_client
 
-        self._client = OllamaClient(self._cfg.llama_guard_model)
+        self._client = create_client("guard")
         self._fallback = HeuristicGuard()
 
     def check(self, text: str) -> SafetyVerdict:
@@ -94,7 +102,7 @@ class LlamaGuardGuard(InputSafetyGuard):
                 max_tokens=128,
             )
         except LLMError as exc:
-            logger.warning("LlamaGuard unavailable, using heuristic guard: %s", exc)
+            logger.warning("Model guard unavailable, using heuristic guard: %s", exc)
             return self._fallback.check(text)
 
         content = response.content.strip().lower()
@@ -104,16 +112,36 @@ class LlamaGuardGuard(InputSafetyGuard):
                 line.strip() for line in content.splitlines()[1:] if line.strip()
             ] or ["unsafe_request"]
             return SafetyVerdict(
-                safe=False, categories=categories, reason="LlamaGuard flagged content.", raw=content
+                safe=False, categories=categories, reason="Model guard flagged content.", raw=content
             )
         return SafetyVerdict(safe=True, raw=content)
 
 
+# Backwards-compatible alias: the guard used to be Ollama/LlamaGuard-only.
+LlamaGuardGuard = ModelGuard
+
+
 def build_input_guard() -> InputSafetyGuard:
-    backend = get_settings().safety.input_guard_backend.lower()
+    settings = get_settings()
+    # Master switch: ENABLE_LLAMAGUARD=false forces the fast regex guard and
+    # avoids a slow model call. We also fall back to heuristic when the LLM is
+    # unreachable so input safety never blocks on a dead backend.
+    if not settings.enable_llamaguard:
+        logger.info(
+            "[GUARD] Model guard disabled (ENABLE_LLAMAGUARD=false) — using heuristic guard."
+        )
+        return HeuristicGuard()
+
+    from app.llm.runtime import llm_available
+
+    if not llm_available():
+        logger.warning("[GUARD] LLM backend unavailable — using heuristic input guard.")
+        return HeuristicGuard()
+
+    backend = settings.safety.input_guard_backend.lower()
     if backend == "heuristic":
         return HeuristicGuard()
-    return LlamaGuardGuard()
+    return ModelGuard()
 
 
 _guard: Optional[InputSafetyGuard] = None

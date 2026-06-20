@@ -6,6 +6,7 @@ import httpx
 
 from app.cache.semantic_cache import SemanticCache
 from app.llm.base import ChatMessage, LLMError, LLMResponse, Role
+from app.llm.gemini_client import GeminiClient, _to_gemini_contents
 from app.llm.ollama_client import OllamaClient
 from app.llm.provider import LLMProvider
 
@@ -23,7 +24,7 @@ class _StubClient:
         self._fail = fail
         self.calls = 0
 
-    def chat(self, messages, *, temperature=None, max_tokens=None, stop=None):
+    def chat(self, messages, *, temperature=None, max_tokens=None, stop=None, timeout=None):
         self.calls += 1
         if self._fail:
             raise LLMError("boom")
@@ -77,3 +78,59 @@ def test_ollama_client_parses_response():
     assert resp.prompt_tokens == 12
     assert resp.completion_tokens == 5
     assert resp.total_tokens == 17
+
+
+def test_gemini_message_mapping():
+    system, contents = _to_gemini_contents(
+        [
+            ChatMessage(role=Role.SYSTEM, content="be precise"),
+            ChatMessage(role=Role.USER, content="hi"),
+            ChatMessage(role=Role.ASSISTANT, content="hello"),
+        ]
+    )
+    assert system == {"parts": [{"text": "be precise"}]}
+    assert contents == [
+        {"role": "user", "parts": [{"text": "hi"}]},
+        {"role": "model", "parts": [{"text": "hello"}]},
+    ]
+
+
+def test_gemini_client_parses_response():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params.get("key") == "test-key"
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {"role": "model", "parts": [{"text": "Grounded answer"}]},
+                        "finishReason": "STOP",
+                    }
+                ],
+                "usageMetadata": {"promptTokenCount": 8, "candidatesTokenCount": 3},
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = GeminiClient("gemini-2.5-flash", api_key="test-key")
+
+    original = httpx.Client
+    httpx.Client = lambda *a, **k: original(transport=transport)  # type: ignore
+    try:
+        resp = client.chat([ChatMessage(role=Role.USER, content="hi")])
+    finally:
+        httpx.Client = original
+
+    assert resp.content == "Grounded answer"
+    assert resp.prompt_tokens == 8
+    assert resp.completion_tokens == 3
+    assert resp.finish_reason == "STOP"
+
+
+def test_gemini_client_requires_api_key():
+    client = GeminiClient("gemini-2.5-flash", api_key="")
+    try:
+        client.chat([ChatMessage(role=Role.USER, content="hi")])
+        assert False, "expected LLMError when API key missing"
+    except LLMError:
+        pass

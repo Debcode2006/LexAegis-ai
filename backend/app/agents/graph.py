@@ -164,5 +164,33 @@ _workflow: Optional[LegalAgentWorkflow] = None
 def get_workflow() -> LegalAgentWorkflow:
     global _workflow
     if _workflow is None:
-        _workflow = LegalAgentWorkflow()
+        # Wire the LLM provider so the chat path actually uses Ollama. The
+        # provider is only constructed when at least one LLM stage is enabled
+        # (construction is network-free; agents skip it when their flag is off),
+        # so light/offline configs incur no Ollama dependency.
+        settings = get_settings()
+        from app.llm.runtime import llm_available
+
+        want_llm = settings.use_llm_for_understanding or settings.use_llm_for_reasoning
+        provider: Optional[LLMProvider] = None
+        if want_llm and llm_available():
+            from app.llm.provider import get_llm_provider
+
+            provider = get_llm_provider()
+            logger.info(
+                "[WORKFLOW] LLM enabled (understanding=%s, reasoning=%s) — "
+                "provider wired: primary=%s fallback=%s",
+                settings.use_llm_for_understanding,
+                settings.use_llm_for_reasoning,
+                provider.primary_model,
+                provider.fallback_model,
+            )
+        elif want_llm and not llm_available():
+            logger.warning(
+                "[WORKFLOW] LLM stages requested but Ollama is unavailable — "
+                "auto-disabled; using heuristics + extractive reasoning."
+            )
+        else:
+            logger.info("[WORKFLOW] LLM disabled — using deterministic heuristics only")
+        _workflow = LegalAgentWorkflow(provider=provider)
     return _workflow

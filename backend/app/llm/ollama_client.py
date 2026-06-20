@@ -44,6 +44,7 @@ class OllamaClient(LLMClient):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         stop: Optional[List[str]] = None,
+        timeout: Optional[float] = None,
     ) -> LLMResponse:
         payload = {
             "model": self.model,
@@ -57,9 +58,12 @@ class OllamaClient(LLMClient):
         if stop:
             payload["options"]["stop"] = stop
 
+        # Per-call timeout override (e.g. reasoning gets a longer budget than the
+        # short default used for fast stages / health checks).
+        effective_timeout = timeout or self._timeout
         start = time.perf_counter()
         try:
-            with httpx.Client(timeout=self._timeout) as client:
+            with httpx.Client(timeout=effective_timeout) as client:
                 resp = client.post(f"{self._base_url}/api/chat", json=payload)
                 resp.raise_for_status()
                 data = resp.json()
@@ -69,11 +73,21 @@ class OllamaClient(LLMClient):
 
         latency_ms = (time.perf_counter() - start) * 1000.0
         content = (data.get("message") or {}).get("content", "")
+        prompt_tokens = int(data.get("prompt_eval_count", 0) or 0)
+        completion_tokens = int(data.get("eval_count", 0) or 0)
+        # Definitive proof that this Ollama model actually served a request.
+        logger.info(
+            "[OLLAMA] model=%s responded in %.0fms (prompt_tokens=%d, completion_tokens=%d)",
+            self.model,
+            latency_ms,
+            prompt_tokens,
+            completion_tokens,
+        )
         return LLMResponse(
             content=content,
             model=self.model,
-            prompt_tokens=int(data.get("prompt_eval_count", 0) or 0),
-            completion_tokens=int(data.get("eval_count", 0) or 0),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
             latency_ms=latency_ms,
             finish_reason=data.get("done_reason"),
             raw=data,
@@ -88,3 +102,18 @@ class OllamaClient(LLMClient):
                 return resp.status_code == 200
         except httpx.HTTPError:
             return False
+
+    def list_models(self) -> List[str]:
+        """Return the names of models installed on the Ollama server (e.g.
+        ``["qwen3:latest", "llama-guard3:latest"]``). Empty on any failure.
+        """
+
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                resp = client.get(f"{self._base_url}/api/tags")
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPError as exc:
+            logger.warning("Could not list Ollama models: %s", exc)
+            return []
+        return [m.get("name", "") for m in (data.get("models") or []) if m.get("name")]

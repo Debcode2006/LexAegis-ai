@@ -67,9 +67,14 @@ class LegalReasoningAgent:
         if self._use_llm:
             answer = self._reason_with_llm(state.query, context)
             if answer:
+                logger.info("[REASONING] answer generated via LLM (Ollama)")
                 state.log("reasoning", mode="llm", length=len(answer))
                 return {"answer": answer, "trace": state.trace}
 
+        logger.info(
+            "[REASONING] using EXTRACTIVE fallback — Ollama NOT used (use_llm=%s)",
+            self._use_llm,
+        )
         answer = self._extractive_fallback(chunks)
         state.log("reasoning", mode="extractive", length=len(answer))
         return {"answer": answer, "trace": state.trace}
@@ -80,7 +85,11 @@ class LegalReasoningAgent:
             ChatMessage(role=Role.USER, content=f"Context:\n{context}\n\nQuestion: {query}"),
         ]
         try:
-            response = self._provider.chat(messages, temperature=0.1)
+            response = self._provider.chat(
+                messages,
+                temperature=0.1,
+                timeout=get_settings().ollama.reasoning_timeout_seconds,
+            )
         except LLMError as exc:
             logger.warning("Reasoning LLM failed: %s", exc)
             return None

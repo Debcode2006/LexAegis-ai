@@ -37,6 +37,11 @@ _TEST_ENV = {
     "RETRIEVAL_RERANKER_BACKEND": "lexical",
     "SAFETY_PII_BACKEND": "regex",
     "SAFETY_INPUT_GUARD_BACKEND": "heuristic",
+    # Keep the suite hermetic and deterministic: no Ollama calls. The agents
+    # fall back to heuristic understanding + extractive reasoning, which the
+    # tests assert against. (Production enables these via backend/.env.)
+    "USE_LLM_FOR_UNDERSTANDING": "false",
+    "USE_LLM_FOR_REASONING": "false",
 }
 os.environ.update(_TEST_ENV)
 

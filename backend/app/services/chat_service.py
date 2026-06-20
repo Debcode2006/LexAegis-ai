@@ -10,13 +10,17 @@ Bridges the HTTP layer and the agent workflow:
 
 from __future__ import annotations
 
+import time
 from typing import List, Optional
 
 from app.agents.graph import LegalAgentWorkflow, get_workflow
 from app.agents.state import AgentState
 from app.cache.semantic_cache import SemanticCache, get_semantic_cache, normalize_key
+from app.core.logging import get_logger
 from app.observability.tracing import span
 from app.schemas.chat import ChatResponse, GroundednessInfo
+
+logger = get_logger(__name__)
 
 
 class ChatService:
@@ -43,8 +47,10 @@ class ChatService:
         cache_key = normalize_key("chat", tenant_id, query, scope_key)
         cached = self._cache.get(cache_key)
         if cached is not None and not include_trace:
+            logger.info("[CHAT] cache hit (tenant=%s) — returning cached response", tenant_id)
             return cached
 
+        start = time.perf_counter()
         with span(
             "chat.turn",
             {"tenant_id": tenant_id, "query_len": len(query), "scoped": bool(document_ids)},
@@ -54,6 +60,17 @@ class ChatService:
             attrs["confidence"] = state.confidence
             attrs["blocked"] = state.blocked
             attrs["retrieved"] = len(state.retrieval.chunks) if state.retrieval else 0
+
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        logger.info(
+            "[CHAT] total latency=%.0fms tenant=%s intent=%s confidence=%.2f blocked=%s retrieved=%d",
+            elapsed_ms,
+            tenant_id,
+            state.intent.value,
+            state.confidence,
+            state.blocked,
+            len(state.retrieval.chunks) if state.retrieval else 0,
+        )
 
         response = self._to_response(state, include_trace=include_trace)
         if not state.blocked:
