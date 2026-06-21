@@ -1,0 +1,51 @@
+{
+  "name": "lexaegis-legal-benchmark-v1",
+  "description": "Small grounded legal QA benchmark for LexAegis AI. Each sample's answer is fully supported by the bundled documents.",
+  "tenant_id": "benchmark",
+  "documents": [
+    {
+      "document_id": "msa-001",
+      "document_name": "Master Services Agreement.txt",
+      "document_type": "contract",
+      "text": "MASTER SERVICES AGREEMENT\n\nSection 1. DEFINITIONS\n1.1 \"Confidential Information\" means any non-public information disclosed by one party to the other.\n\nSection 2. CONFIDENTIALITY\n2.1 Each party shall keep the other party's Confidential Information secret and shall not disclose it to any third party.\n2.2 The confidentiality obligations survive termination of this Agreement for a period of five years.\n\nSection 3. LIABILITY\n3.1 Neither party shall be liable to the other for any indirect, incidental, or consequential damages.\n3.2 The total aggregate liability of either party shall not exceed the fees paid in the twelve months preceding the claim.\n\nSection 4. TERM AND TERMINATION\n4.1 This Agreement commences on the Effective Date and continues for an initial term of two years.\n4.2 Either party may terminate this Agreement for convenience upon thirty days prior written notice.\n"
+    },
+    {
+      "document_id": "privacy-001",
+      "document_name": "Data Protection Policy.txt",
+      "document_type": "policy",
+      "text": "DATA PROTECTION POLICY\n\nSection 1. SCOPE\n1.1 This policy applies to all processing of personal data carried out by the Company.\n\nSection 2. DATA RETENTION\n2.1 Personal data shall be retained for no longer than is necessary for the purposes for which it was collected.\n2.2 Customer records shall be deleted within ninety days of account closure unless a legal obligation requires longer retention.\n\nSection 3. DATA SUBJECT RIGHTS\n3.1 Data subjects have the right to access their personal data within thirty days of a verified request.\n3.2 Data subjects may request erasure of their personal data, subject to applicable legal exceptions.\n"
+    }
+  ],
+  "samples": [
+    {
+      "question": "How long do the confidentiality obligations survive after termination?",
+      "ground_truth": "The confidentiality obligations survive termination of the Agreement for a period of five years.",
+      "intent": "contract_review",
+      "relevant_document_ids": ["msa-001"]
+    },
+    {
+      "question": "What is the cap on each party's total aggregate liability?",
+      "ground_truth": "Each party's total aggregate liability shall not exceed the fees paid in the twelve months preceding the claim.",
+      "intent": "legal_risk_analysis",
+      "relevant_document_ids": ["msa-001"]
+    },
+    {
+      "question": "What notice is required to terminate the agreement for convenience?",
+      "ground_truth": "Either party may terminate for convenience upon thirty days prior written notice.",
+      "intent": "contract_review",
+      "relevant_document_ids": ["msa-001"]
+    },
+    {
+      "question": "How long are customer records retained after account closure?",
+      "ground_truth": "Customer records shall be deleted within ninety days of account closure unless a legal obligation requires longer retention.",
+      "intent": "policy_lookup",
+      "relevant_document_ids": ["privacy-001"]
+    },
+    {
+      "question": "Within how many days must a data subject access request be fulfilled?",
+      "ground_truth": "Data subjects have the right to access their personal data within thirty days of a verified request.",
+      "intent": "compliance_check",
+      "relevant_document_ids": ["privacy-001"]
+    }
+  ]
+}

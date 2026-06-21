@@ -337,8 +337,14 @@ class Settings(BaseSettings):
 
     # --- Nested subsystem settings -------------------------------------------
     # --- Evaluation -----------------------------------------------------------
-    evaluation_dataset_path: str = Field(default="../evaluation/datasets/legal_benchmark.json")
-    evaluation_results_path: str = Field(default="../evaluation/results/latest.json")
+    # Relative paths are resolved by the evaluation route against the backend dir
+    # (BACKEND_DIR), the cwd, and the repo root — so this default points at the
+    # report baked into the image under backend/evaluation/ AND at the repo-root
+    # copy the offline harness writes during local dev. (The old "../evaluation"
+    # default resolved against the cwd, which on Railway is /app -> /evaluation,
+    # a path that does not exist in the image; that left the dashboard empty.)
+    evaluation_dataset_path: str = Field(default="evaluation/datasets/legal_benchmark.json")
+    evaluation_results_path: str = Field(default="evaluation/results/latest.json")
 
     # --- Agent orchestration --------------------------------------------------
     # orchestrator: "langgraph" (production) | "sequential" (no LangGraph dep).

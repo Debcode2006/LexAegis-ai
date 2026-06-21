@@ -19,8 +19,12 @@ deployment/
 frontend/
 node_modules/
 
-# Offline-eval artifacts are bind-mounted at runtime, never baked in.
-evaluation/
+# Repo-root offline-eval scripts/datasets: NOT baked in (compose bind-mounts
+# them at runtime). The leading slash anchors this to the repo root, so it does
+# NOT match backend/evaluation/ — that subtree IS copied into the image (via
+# `COPY backend/ /app`) and carries the report the Evaluation Dashboard serves on
+# Railway, which has no bind-mount. See backend/app/api/v1/routes/evaluation.py.
+/evaluation/
 
 # Python noise anywhere in the tree.
 **/__pycache__/
