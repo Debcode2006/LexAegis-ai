@@ -143,9 +143,7 @@ factory binds to Ollama or Gemini at startup.
 
 Chroma is the only stateful container. Its data lives in a **named Docker volume**
 (`chroma_data`) locally and a **Railway volume** in production. See
-[DEPLOYMENT_VALIDATION.md](DEPLOYMENT_VALIDATION.md) for verification and the
-"Persistent storage" section of [DOCKER_FOR_BEGINNERS.md](DOCKER_FOR_BEGINNERS.md)
-for backup/restore commands.
+[DEPLOYMENT_VALIDATION.md](DEPLOYMENT_VALIDATION.md) for verification.
 
 | Where        | Volume                | Mount        | Survives restart | Survives rebuild |
 |--------------|-----------------------|--------------|------------------|------------------|
@@ -156,6 +154,4 @@ for backup/restore commands.
 
 See also:
 [LLM_PROVIDER_GUIDE.md](LLM_PROVIDER_GUIDE.md) ·
-[DOCKER_FOR_BEGINNERS.md](DOCKER_FOR_BEGINNERS.md) ·
-[DOCKER_DESKTOP_GUIDE.md](DOCKER_DESKTOP_GUIDE.md) ·
 [DEPLOYMENT_VALIDATION.md](DEPLOYMENT_VALIDATION.md)

@@ -1,41 +1,96 @@
 # ⚖️ LexAegis AI
 
-**A Production-Grade Agentic Legal Intelligence Platform.**
+**Agentic Legal Intelligence Platform — ask questions about your legal documents and get grounded, cited, confidence-scored answers.**
 
-LexAegis AI lets users upload legal documents (contracts, compliance manuals,
-regulations, policies) and ask legal questions, compare clauses, analyze risk,
-and retrieve evidence — returning **grounded, cited, confidence-scored** answers
-produced by an 8-agent LangGraph workflow over a hybrid retrieval pipeline, with
-input/output safety, observability, semantic caching, and evaluation built in.
+Upload contracts, policies, regulations, or compliance manuals, then ask in plain
+English ("How long do confidentiality obligations survive termination?"). LexAegis
+retrieves the relevant clauses, reasons over **only that retrieved text**, and
+returns an answer with inline `[S1]` citations, a confidence breakdown, and
+groundedness checks — never free-form hallucination. Built with input/output
+safety, PII masking, observability, and evaluation in the box.
 
-> This repository is built to run **fully locally first**. Every heavy component
-> (BGE embeddings, ChromaDB, Presidio, LlamaGuard, Phoenix, GPTCache, RAGAS,
-> DeepEval) sits behind a Protocol with a deterministic light fallback, so you
-> can run and test the entire system offline, then flip a config flag to use the
-> production backend. Dockerization comes after local validation.
+> **Live in production:** Next.js on **Vercel**, FastAPI on **Railway**, **Supabase**
+> auth, **Gemini 2.5 Flash** inference.
 
 ---
 
-## Architecture at a glance (six layers)
+## ▶️ Try it in 60 seconds
+
+- **Live demo:** `https://lex-aegis-ai.vercel.app` -->
+- **Demo login:** open the app → **Sign in** page → click **Try demo** → **Sign in**
+  (fills `demo@lexaegis.ai`). Or paste a Supabase access token via the dev-token box.
+- **Then:** Upload a PDF/DOCX/TXT on **Upload** → ask a question on **Legal Chat** →
+  inspect quality on **Evaluation** and latency/cost on **Dashboard**.
+
+---
+
+## What it does
+
+- 📄 **Document ingestion** — PDF/DOCX/TXT → structure-aware *legal* chunking that
+  preserves section / clause / page so citations are precise.
+- 🔎 **Hybrid retrieval** — dense embeddings (BGE) **+** BM25 keyword search, merged
+  with Reciprocal Rank Fusion, de-duplicated, and reranked.
+- 🤖 **Agentic reasoning** — a LangGraph workflow (input guard **+ 8 agents**)
+  produces a context-only, cited answer with an explainable confidence score.
+- 🛡️ **Safety & PII** — prompt-injection/unsafe-input guard, Presidio PII masking
+  (at ingest, query, and output), and a grounded-output gate that blocks
+  ungrounded/uncited answers.
+- 📊 **Observability & cost** — in-process latency tracing, cache stats, and
+  estimated LLM spend, all surfaced on the dashboard.
+- 🧪 **Evaluation** — a benchmark harness + dashboard (offline lexical metrics by
+  default; optional RAGAS / DeepEval with a Gemini judge).
+- 🔌 **One-switch portability** — the same code runs **fully offline** (deterministic
+  light backends) or on production backends by changing environment variables only.
+
+---
+
+## How it works
 
 ```
  ┌─────────────────────────────────────────────────────────────────────────┐
- │ Layer 1 — INGRESS    FastAPI · Supabase JWT · rate limiting · tenants     │
+ │ L1 INGRESS     FastAPI · Supabase JWT · rate limiting · multi-tenant      │
  ├─────────────────────────────────────────────────────────────────────────┤
- │ Layer 2 — SAFETY     LlamaGuard input safety · Presidio PII · output gate │
+ │ L2 SAFETY      input guard · Presidio PII masking · grounded-output gate  │
  ├─────────────────────────────────────────────────────────────────────────┤
- │ Layer 3 — RETRIEVAL  loaders → legal chunking → dense+sparse → RRF →      │
- │                       compression → rerank → top-K                        │
+ │ L3 RETRIEVAL   loaders → legal chunking → dense + BM25 → RRF →            │
+ │                compression → rerank → top-K                               │
  ├─────────────────────────────────────────────────────────────────────────┤
- │ Layer 4 — AGENTS     LangGraph: 8 agents → grounded, cited answer         │
+ │ L4 AGENTS      LangGraph: guard + 8 agents → grounded, cited answer       │
  ├─────────────────────────────────────────────────────────────────────────┤
- │ Layer 5 — QUALITY    RAGAS · DeepEval · benchmark dataset                 │
+ │ L5 QUALITY     legal benchmark + evaluation dashboard (RAGAS/DeepEval opt)│
  ├─────────────────────────────────────────────────────────────────────────┤
- │ Layer 6 — OPS        Arize Phoenix tracing · OpenInference · GPTCache     │
+ │ L6 OPS         in-process tracing + cost metering + cache (Phoenix opt)   │
  └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-Full detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**One chat turn:** verify JWT → input safety + PII mask → query understanding →
+hybrid retrieval → rerank → reason over context (Gemini) → attach citations →
+groundedness + confidence → output-safety release.
+
+Deep dive: **[PROJECT_DETAILS.md](PROJECT_DETAILS.md)** · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/AGENT_WORKFLOW.md](docs/AGENT_WORKFLOW.md)
+
+---
+
+## Tech stack (as deployed)
+
+| Concern | Technology |
+|---|---|
+| Frontend | Next.js · TypeScript · Tailwind (Vercel) |
+| Backend | FastAPI · Python 3.12 (Railway) |
+| Auth | Supabase Auth — JWT (HS256 or JWKS RS256/ES256) |
+| LLM | **Gemini 2.5 Flash** (prod) · Ollama Qwen3/Llama 3.1 (local) |
+| Orchestration | LangGraph (input guard + 8 agents) |
+| Vector DB | ChromaDB (persistent volume) |
+| Retrieval | BGE dense embeddings + BM25 sparse + RRF + rerank |
+| Safety | Microsoft Presidio (PII) · input/output guards |
+| Observability | In-process tracing + cost metering · OTLP/Phoenix export optional |
+| Evaluation | Offline lexical benchmark · RAGAS / DeepEval optional |
+
+> Heavy backends sit behind interfaces with deterministic light fallbacks, so the
+> whole pipeline runs and tests offline. Some components are intentionally optional
+> in production (e.g. Phoenix tracing, BGE cross-encoder reranker) — see
+> **[PROJECT_DETAILS.md](PROJECT_DETAILS.md)** §14, §17–18 for the exact, honest
+> production configuration.
 
 ---
 
@@ -44,96 +99,39 @@ Full detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ```
 lexaegis-ai/
 ├─ backend/          FastAPI + agents + retrieval + safety + observability
-├─ frontend/         Next.js + TypeScript + Tailwind (6 pages)
-├─ evaluation/       Benchmark dataset + RAGAS / DeepEval / offline runners
-├─ docs/             Full documentation set (14 guides)
-├─ scripts/          Local run helpers
-├─ docker/           (reserved — deployment comes later)
-└─ .env.example      Every environment variable, documented
+├─ frontend/         Next.js + TypeScript + Tailwind
+├─ evaluation/       Benchmark dataset + offline/RAGAS/DeepEval runners
+├─ docs/             Architecture, retrieval, agents, safety, deployment guides
+├─ deployment/       Production env template
+└─ PROJECT_DETAILS.md   Full technical reference (single source of truth)
 ```
 
 ---
 
-## Tech stack
-
-| Concern | Technology |
-|---|---|
-| API gateway | FastAPI |
-| Auth | Supabase Auth (JWT) |
-| Agents | LangGraph |
-| Vector DB | ChromaDB |
-| Dense embeddings | BAAI/bge-large-en-v1.5 |
-| Reranker | BAAI/bge-reranker-large |
-| Sparse retrieval | BM25 (rank_bm25) |
-| LLM | Ollama — Qwen3 (primary), Llama 3.1 (fallback) |
-| Safety | LlamaGuard, Microsoft Presidio |
-| Caching | GPTCache (semantic) |
-| Observability | Arize Phoenix + OpenInference |
-| Evaluation | RAGAS, DeepEval |
-| Frontend | Next.js, TypeScript, Tailwind, shadcn-style UI |
-
----
-
-## Quick start (fully local, no model downloads)
-
-### 1. Backend
+## Run locally (offline, no model downloads)
 
 ```bash
-python -m venv .venv
-# Windows:  .venv\Scripts\activate   |  *nix: source .venv/bin/activate
-
+# Backend
+python -m venv .venv && . .venv/Scripts/activate      # *nix: source .venv/bin/activate
 pip install -r backend/requirements-phase1.txt
 pip install numpy rank-bm25 langgraph langchain-core   # light pipeline deps
+cp .env.example backend/.env                           # set SUPABASE_JWT_SECRET (any value locally)
+cd backend && uvicorn app.main:app --reload            # http://localhost:8000/docs
 
-cp .env.example backend/.env          # set SUPABASE_JWT_SECRET (any value for local tests)
+# Frontend (new terminal)
+cd frontend && cp .env.local.example .env.local        # set NEXT_PUBLIC_API_BASE
+npm install && npm run dev                              # http://localhost:3000
 
-cd backend
-uvicorn app.main:app --reload         # http://localhost:8000/docs
+# Tests
+cd backend && pytest                                    # 95 passed, fully offline
 ```
 
-Smoke test (no auth):
-```bash
-curl "http://localhost:8000/api/v1/ping?msg=hello"
-```
+Generate a local auth token without Supabase: `python scripts/generate_dev_token.py`
+(paste it into the login page's dev-token box or Swagger's Authorize).
 
-### 2. Evaluation (offline, end-to-end)
-
-```bash
-python evaluation/evaluate_local.py    # writes evaluation/results/latest.json
-```
-
-### 3. Frontend
-
-```bash
-cd frontend
-cp .env.local.example .env.local       # set NEXT_PUBLIC_API_BASE (+ Supabase if used)
-npm install
-npm run dev                            # http://localhost:3000
-```
-
-### 4. Tests
-
-```bash
-cd backend
-pip install pytest pytest-asyncio
-pytest                                 # 57 passed — fully offline
-```
-
----
-
-## Going to production backends
-
-No code changes — flip config in `backend/.env` (see the table in
-[backend/README.md](backend/README.md) §5) and install the heavy stack:
-
-```bash
-pip install -r backend/requirements.txt
-ollama pull qwen3 && ollama pull llama3.1 && ollama pull llama-guard3
-python -m spacy download en_core_web_lg     # Presidio NER
-```
-
-Setup guides: [OLLAMA_SETUP](docs/OLLAMA_SETUP.md) ·
-[SUPABASE_SETUP](docs/SUPABASE_SETUP.md) · [PHOENIX_SETUP](docs/PHOENIX_SETUP.md).
+**Go to production:** flip `LLM_PROVIDER=gemini` and the backend selectors in env —
+no code changes. See [docs/DEPLOYMENT_ARCHITECTURE.md](docs/DEPLOYMENT_ARCHITECTURE.md)
+and [docs/LLM_PROVIDER_GUIDE.md](docs/LLM_PROVIDER_GUIDE.md).
 
 ---
 
@@ -141,25 +139,20 @@ Setup guides: [OLLAMA_SETUP](docs/OLLAMA_SETUP.md) ·
 
 | Guide | What it covers |
 |---|---|
+| [PROJECT_DETAILS.md](PROJECT_DETAILS.md) | Complete technical reference: architecture, every layer, decisions, limitations |
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | The six layers and how they fit together |
-| [BACKEND_GUIDE](docs/BACKEND_GUIDE.md) | Backend modules, config, request flow |
-| [FRONTEND_GUIDE](docs/FRONTEND_GUIDE.md) | Next.js app, pages, API client, auth |
-| [DEVELOPER_HANDBOOK](docs/DEVELOPER_HANDBOOK.md) | Setup, conventions, adding features |
-| [INGESTION_PIPELINE](docs/INGESTION_PIPELINE.md) | Loaders → PII mask → chunk → index |
-| [AGENT_WORKFLOW](docs/AGENT_WORKFLOW.md) | The 8 agents and the LangGraph |
+| [AGENT_WORKFLOW](docs/AGENT_WORKFLOW.md) | The input guard + 8 agents and the LangGraph |
 | [RETRIEVAL_PIPELINE](docs/RETRIEVAL_PIPELINE.md) | Hybrid retrieval internals |
-| [OBSERVABILITY_GUIDE](docs/OBSERVABILITY_GUIDE.md) | Tracing + caching + metrics |
-| [EVALUATION_GUIDE](docs/EVALUATION_GUIDE.md) | RAGAS / DeepEval / offline metrics |
 | [SECURITY_GUIDE](docs/SECURITY_GUIDE.md) | Auth, tenancy, safety, PII |
-| [SUPABASE_SETUP](docs/SUPABASE_SETUP.md) | Auth project setup |
-| [OLLAMA_SETUP](docs/OLLAMA_SETUP.md) | Local LLM setup |
-| [PHOENIX_SETUP](docs/PHOENIX_SETUP.md) | Tracing UI setup |
+| [EVALUATION_GUIDE](docs/EVALUATION_GUIDE.md) | Benchmark + RAGAS / DeepEval / offline metrics |
+| [DEPLOYMENT_ARCHITECTURE](docs/DEPLOYMENT_ARCHITECTURE.md) · [LLM_PROVIDER_GUIDE](docs/LLM_PROVIDER_GUIDE.md) | How local vs production are wired |
 
 ---
 
 ## Status
 
-Built and verified through **local validation** (backend, agents, retrieval,
-safety, observability, caching, evaluation, frontend). Dockerization, Kubernetes,
-and Terraform are intentionally **out of scope** until local behavior is signed
-off.
+**Deployed and working in production** (Vercel + Railway + Supabase + Gemini). The
+core path — auth → upload → ingest → retrieve → reason → cite → validate — is
+implemented and validated (95 backend tests pass; frontend builds clean). Known
+limitations and the precise production configuration are documented honestly in
+**[PROJECT_DETAILS.md](PROJECT_DETAILS.md)**.

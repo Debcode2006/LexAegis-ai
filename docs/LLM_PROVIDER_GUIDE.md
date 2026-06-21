@@ -151,8 +151,6 @@ docker compose --env-file deployment/production.env \
 
 **Docs**
 - `docs/DEPLOYMENT_ARCHITECTURE.md`
-- `docs/DOCKER_FOR_BEGINNERS.md`
-- `docs/DOCKER_DESKTOP_GUIDE.md`
 - `docs/DEPLOYMENT_VALIDATION.md`
 - `docs/LLM_PROVIDER_GUIDE.md` (this file)
 
@@ -273,4 +271,4 @@ Assumes a free Railway account and the repo on GitHub.
 
 No deployment step is left undocumented. Start at
 [DEPLOYMENT_ARCHITECTURE.md](DEPLOYMENT_ARCHITECTURE.md) for the big picture, then
-[DOCKER_FOR_BEGINNERS.md](DOCKER_FOR_BEGINNERS.md) if Docker is new to you.
+[DEPLOYMENT_VALIDATION.md](DEPLOYMENT_VALIDATION.md) to verify your deployment.

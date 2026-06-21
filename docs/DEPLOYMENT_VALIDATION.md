@@ -164,6 +164,5 @@ curl -fsS -H "Authorization: Bearer $TOKEN" "$API/auth/whoami" >/dev/null && ech
 echo "ALL BASIC CHECKS PASSED"
 ```
 
-If any step fails, see the troubleshooting tables in
-[DOCKER_FOR_BEGINNERS.md](DOCKER_FOR_BEGINNERS.md) and
+If any step fails, see the troubleshooting table in
 [LLM_PROVIDER_GUIDE.md](LLM_PROVIDER_GUIDE.md).
