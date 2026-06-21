@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import get_current_principal
 from app.auth.models import Principal
 from app.cache.semantic_cache import get_semantic_cache
+from app.observability.cost import get_cost_meter
 from app.observability.tracing import get_trace_recorder
 
 router = APIRouter(prefix="/observability", tags=["observability"])
@@ -17,6 +18,7 @@ async def metrics(_: Principal = Depends(get_current_principal)) -> dict:
     return {
         "cache": get_semantic_cache().stats(),
         "traces": get_trace_recorder().summary(),
+        "cost": get_cost_meter().stats(),
     }
 
 

@@ -31,6 +31,20 @@ export default function DashboardPage() {
   const traceCount = traces?.count ?? 0;
   const hitRate = cache?.hit_rate ?? 0;
 
+  // Estimated LLM spend from the in-process cost meter (Gemini 2.5 Flash
+  // pricing). Tokens reflect only real model calls, not cache hits.
+  const cost = metrics?.cost;
+  const totalCost = cost?.total_cost_usd ?? 0;
+  const promptTokens = cost?.total_prompt_tokens ?? 0;
+  const completionTokens = cost?.total_completion_tokens ?? 0;
+  const fmt = (n: number) => n.toLocaleString();
+
+  const usage = [
+    { label: "Estimated cost", value: metrics ? `$${totalCost.toFixed(4)}` : "—" },
+    { label: "Prompt tokens", value: metrics ? fmt(promptTokens) : "—" },
+    { label: "Completion tokens", value: metrics ? fmt(completionTokens) : "—" },
+  ];
+
   const observability = [
     { label: "Average latency", value: metrics ? `${Math.round(avgLatency)} ms` : "—" },
     { label: "Max latency", value: metrics ? `${Math.round(maxLatency)} ms` : "—" },
@@ -64,6 +78,20 @@ export default function DashboardPage() {
         <h2 className="text-lg font-semibold">Observability</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           {observability.map((stat) => (
+            <Card key={stat.label}>
+              <CardContent className="pt-5">
+                <p className="text-sm text-slate-500">{stat.label}</p>
+                <p className="text-3xl font-bold">{stat.value}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Usage &amp; Cost</h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {usage.map((stat) => (
             <Card key={stat.label}>
               <CardContent className="pt-5">
                 <p className="text-sm text-slate-500">{stat.label}</p>

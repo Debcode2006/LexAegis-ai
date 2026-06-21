@@ -86,6 +86,7 @@ def client():
 
     from app.cache.semantic_cache import get_semantic_cache
     from app.main import create_app
+    from app.observability.cost import get_cost_meter
     from app.observability.tracing import get_trace_recorder
     from app.retrieval.sparse import get_bm25_index
     from app.retrieval.vector_store import get_vector_store
@@ -100,6 +101,7 @@ def client():
         get_document_registry(),
         get_semantic_cache(),
         get_trace_recorder(),
+        get_cost_meter(),
     ):
         if hasattr(obj, "reset"):
             obj.reset()  # type: ignore[attr-defined]

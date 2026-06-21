@@ -301,6 +301,11 @@ class ObservabilitySettings(BaseSettings):
     cache_backend: str = Field(default="memory")
     cache_similarity_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
     cache_max_entries: int = Field(default=1000, ge=1)
+    # Estimated LLM cost metering (Gemini 2.5 Flash list pricing, USD per 1M
+    # tokens). Used only for the in-process cost meter surfaced on
+    # /observability/metrics — purely informational, no billing dependency.
+    cost_input_per_million: float = Field(default=0.30, ge=0.0)
+    cost_output_per_million: float = Field(default=2.50, ge=0.0)
 
 
 class Settings(BaseSettings):

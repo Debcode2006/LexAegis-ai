@@ -31,6 +31,33 @@ class _StubClient:
         return self._response or LLMResponse(content="ok", model=self.model)
 
 
+def test_cost_meter_aggregates_real_calls_only():
+    from app.observability.cost import get_cost_meter
+
+    meter = get_cost_meter()
+    meter.reset()
+    primary = _StubClient(
+        "gemini-2.5-flash",
+        LLMResponse(content="x", model="gemini-2.5-flash", prompt_tokens=1000, completion_tokens=200),
+    )
+    provider = LLMProvider(primary=primary, fallback=_StubClient("fb"), cache=_fresh_cache())
+    msg = [ChatMessage(role=Role.USER, content="hi")]
+
+    provider.chat(msg)
+    stats = meter.stats()
+    assert stats["calls"] == 1
+    assert stats["total_prompt_tokens"] == 1000
+    assert stats["total_completion_tokens"] == 200
+    # 1000 * 0.30/1M + 200 * 2.50/1M = 0.0003 + 0.0005 = 0.0008
+    assert stats["total_cost_usd"] == 0.0008
+
+    # Identical query is a cache hit -> no API call -> no extra cost recorded.
+    provider.chat(msg)
+    assert primary.calls == 1
+    assert meter.stats()["calls"] == 1
+    meter.reset()
+
+
 def test_provider_uses_primary_when_healthy():
     primary = _StubClient("qwen3", LLMResponse(content="primary", model="qwen3"))
     fallback = _StubClient("llama3.1")

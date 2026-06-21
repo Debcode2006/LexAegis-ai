@@ -17,6 +17,7 @@ from app.cache.semantic_cache import SemanticCache, get_semantic_cache, normaliz
 from app.core.logging import get_logger
 from app.llm.base import ChatMessage, LLMClient, LLMError, LLMResponse
 from app.llm.factory import active_provider, create_client
+from app.observability.cost import get_cost_meter
 
 logger = get_logger(__name__)
 
@@ -33,6 +34,7 @@ class LLMProvider:
         self._primary = primary or create_client("primary")
         self._fallback = fallback or create_client("fallback")
         self._cache = cache or get_semantic_cache()
+        self._cost = get_cost_meter()
         logger.info(
             "[LLM] provider=%s wired (primary=%s, fallback=%s)",
             active_provider(),
@@ -70,6 +72,7 @@ class LLMProvider:
             response = self._primary.chat(
                 messages, temperature=temperature, max_tokens=max_tokens, stop=stop, timeout=timeout
             )
+            self._cost.record(response.prompt_tokens, response.completion_tokens)
             self._cache.set(cache_key, response)
             return response
         except LLMError as exc:
@@ -87,6 +90,7 @@ class LLMProvider:
             response = self._fallback.chat(
                 messages, temperature=temperature, max_tokens=max_tokens, stop=stop, timeout=timeout
             )
+            self._cost.record(response.prompt_tokens, response.completion_tokens)
             self._cache.set(cache_key, response)
             return response
 
