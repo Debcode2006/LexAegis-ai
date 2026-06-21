@@ -16,7 +16,7 @@ safety, PII masking, observability, and evaluation in the box.
 
 ## ▶️ Try it in 60 seconds
 
-- **Live demo:** [Lex Aegis AI](https://lex-aegis-ai.vercel.app) -->
+- **Live demo:** https://lex-aegis-ai.vercel.app -->
 - **Demo login:** open the app → **Sign in** page → click **Try demo** → **Sign in**
   (fills `demo@lexaegis.ai`). Or paste a Supabase access token via the dev-token box.
 - **Then:** Upload a PDF/DOCX/TXT on **Upload** → ask a question on **Legal Chat** →
