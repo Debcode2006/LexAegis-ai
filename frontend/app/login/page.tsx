@@ -36,6 +36,12 @@ export default function LoginPage() {
     router.push("/dashboard");
   };
 
+  const fillDemo = () => {
+    setEmail("demo@lexaegis.ai");
+    setPassword("Demo@12345");
+    setError(null);
+  };
+
   return (
     <div className="mx-auto mt-10 max-w-md">
       <h1 className="mb-1 text-center text-3xl font-bold text-brand">⚖️ LexAegis AI</h1>
@@ -67,6 +73,19 @@ export default function LoginPage() {
               {loading ? "Signing in…" : "Sign in with Supabase"}
             </Button>
           </form>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={fillDemo}
+            disabled={loading}
+          >
+            Try demo
+          </Button>
+          <p className="text-center text-xs text-slate-400">
+            Fills demo credentials — just press “Sign in”.
+          </p>
 
           <div className="relative py-2 text-center text-xs text-slate-400">
             — or paste a dev JWT —
